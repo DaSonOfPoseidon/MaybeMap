@@ -1,0 +1,6 @@
+.env
+*.xlsx
+*.geojson
+grouped_regions_map.*
+*.json
+cache/*
