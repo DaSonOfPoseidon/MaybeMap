@@ -3,4 +3,6 @@
 *.geojson
 grouped_regions_map.*
 *.json
-cache/*
+cache/
+CLAUDE.md
+.claude/

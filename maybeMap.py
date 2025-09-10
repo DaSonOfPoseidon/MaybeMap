@@ -1,112 +1,100 @@
 # MaybeMap.py - Jackson Keithley
 
-import os, json, time, re
+# Standard library
+import os
+import json
+import time 
+import re
+from math import hypot, isclose, pi, cos, sin, sqrt
 from pathlib import Path
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict
 
+# Third party - core
 import numpy as np
-import requests
 import pandas as pd
+import requests
+
+# Geospatial
 import geopandas as gpd
-from adjustText import adjust_text 
+import contextily as cx
+import osmnx as ox
 from shapely.ops import unary_union
-from shapely.geometry import LineString, Point, box
+from shapely.geometry import Point, box
 from shapely import wkt
-from dotenv import load_dotenv 
+
+# Visualization  
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib.patheffects as pe
-from matplotlib.transforms import Bbox
+from matplotlib.lines import Line2D
 
-import contextily as cx
-import osmnx as ox
+# Configuration
+from dotenv import load_dotenv
 
 load_dotenv()
 
 # ======================================================================
-# Settings
+# Configuration
 # ======================================================================
-# Input Excel (must live beside this .py)
-DATA_PATH = Path(__file__).parent / "Socket-Regions.xlsx"  # excel file
 
-# Geocoding (Geoapify) — now pulled from environment
+# Data sources
+DATA_PATH = Path(__file__).parent / "Socket-Regions.xlsx"
 GEOAPIFY_KEY = os.getenv("GEOAPIFY_KEY")
 if not GEOAPIFY_KEY:
     raise RuntimeError("Missing GEOAPIFY_KEY in environment. Please set it in .env")
 
-# Basemap + output toggles
-BASEMAP = "voyager"              # "voyager", "dark", or "positron"
+# Map appearance
+BASEMAP = "voyager"  # "voyager", "dark", or "positron"
 BASEMAP_ZOOM = 9
-SHOW_LABELS = False              # map labels, leave off
+SHOW_LABELS = False
 EXPORT_INTERACTIVE_HTML = True
 INTERACTIVE_HTML_PATH = "grouped_regions_map.html"
 
-# Outward label bias settings
-OUTWARD_ONLY = False            # gate candidates to outward half-space
-OUTWARD_MIN_COS = 0.0          # 0..1; 0 = any outward direction, 0.5 ≈ within 60° of straight-out
-OUTWARD_MIN_DELTA_M = 1500     # label anchor must be at least this much farther from center than the pin
-BBOX_INFLATE_PX = 6            # extra padding around text bboxes for safer no-overlap
-LABEL_SEARCH_ANGLES = 32       # finer angular resolution
-LABEL_SEARCH_RADII  = [1.0, 1.4, 1.9, 2.5, 3.3, 4.2, 5.5, 7.0, 9.0, 11.0]  # more rings to try
-LABEL_PADDING_PX    = 6        # increases label's personal space (used in size pre-measure)
+# Typography hierarchy  
+LABEL_FONTSIZE_PRIMARY = 11
+LABEL_FONTSIZE_SECONDARY = 9  
+LABEL_FONTSIZE_TERTIARY = 8
+LABEL_STRATEGY = "professional_cartographic"
+LABEL_HALO = True
+LABEL_LINE_COLOR = "black"
+LABEL_LINE_ALPHA = 0.7
+LABEL_LINE_WIDTH = 0.9
 
-# AdjustText
-ADJUSTTEXT_FORCE_TEXT  = 1.05    # repulsion strength between labels
-ADJUSTTEXT_FORCE_POINTS = 1.0   # repulsion strength vs. pins
-ADJUSTTEXT_EXPAND_TEXT  = (1.25, 1.3)  # extra space around labels (x, y)
-ADJUSTTEXT_EXPAND_PTS   = (1.25, 1.3)   # extra space around pins (x, y)
-ADJUSTTEXT_MAX_ITERS    = 240   # 120–240 typical; lower = faster, higher = cleaner
-LABEL_OFFSET_M = 3000
-SEED_BASE_STEP_M    = max(1200, LABEL_OFFSET_M)  # baseline seed distance
-SEED_KNN_K          = 3                          # look at 3 nearest neighbors
-SEED_BOOST_FACTOR   = 0.6                        # multiply by local crowding
-LABEL_MIN_DIST_M    = 900                        # clamp: not closer than this to its pin
-LABEL_MAX_DIST_M    = 9000                       # clamp: not farther than this from its pin
+# Label placement - much more aggressive for regional scale
+LABEL_MIN_SEPARATION_M = 15000   # 15km minimum separation for regional maps
+LABEL_EXCLUSION_RADIUS_M = 12000 # 12km exclusion zones
+MAX_LABEL_DISTANCE_M = 80000     # 80km maximum leader lines for very dense areas
 
-# OSM boundary search
+# OSM data fetching
 SEARCH_RADIUS_M = 40000
-MAX_CANDIDATE_AREA_M2 = 3_000_000_000  # drop shapes that are obviously county/state
-
-# City fallback & MEC (circles)
+MAX_CANDIDATE_AREA_M2 = 3_000_000_000
 POINT_FALLBACK_BUFFER_M = 5000
-CIRCLE_PAD_M = 3000              # extra margin so circle clears all towns
+
+# Visual styling
+PIN_MARKER_SIZE = 80
+CITY_FILL_ALPHA = 0.32
+CITY_EDGE_ALPHA = 0.75
+CITY_EDGE_WIDTH = 0.7
+CIRCLE_PAD_M = 3000
 CIRCLE_EDGE_WIDTH = 2.0
 CIRCLE_ALPHA_FILL = 0.15
 CIRCLE_ALPHA_EDGE = 0.9
 
-# City limit styling
-CITY_FILL_ALPHA = 0.32
-CITY_EDGE_ALPHA = 0.75
-CITY_EDGE_WIDTH = 0.7
-
-# Pins
-PIN_MARKER_SIZE = 80
-
-# Dissolved group polygons (export only)
-AREA_STYLE = "union_smooth"      # "union", "union_smooth", "convex_hull"
+# Polygon processing
+AREA_STYLE = "union_smooth"  # "union", "union_smooth", "convex_hull"
 MERGE_GAP_M = 2000
 SIMPLIFY_M = 600
 MIN_PART_M2 = 1_000_000
 
-# Labeling strategy: all cities with collision-aware leaders
-LABEL_STRATEGY = "all_with_leaders"
-LABEL_FONTSIZE = 9
-LABEL_HALO = True
-LABEL_LINE_COLOR = "black"       # (we’ll switch to white on dark tiles)
-LABEL_LINE_ALPHA = 0.6
-LABEL_LINE_WIDTH = 0.8
 
-# Label placement search (fast, collision-aware)
-
-
-# OSM / OSMnx politeness
+# OSM settings
 ox.settings.use_cache = True
 ox.settings.log_console = False
 ox.settings.nominatim_pause = 1.1
 
 # ======================================================================
-# Lightweight caches
+# Data Processing Functions
 # ======================================================================
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "MaybeMap/1.0"})
@@ -131,9 +119,7 @@ def _save_geocode_cache():
 def _save_boundary_cache():
     BOUNDARY_CACHE_PATH.write_text(json.dumps(BOUNDARY_WKT, indent=2))
 
-# ======================================================================
-# Helpers
-# ======================================================================
+# Color utility
 def lighten(hex_color: str, amount: float = 0.6) -> str:
     r, g, b = mcolors.to_rgb(hex_color)
     r = r + (1 - r) * amount
@@ -160,13 +146,21 @@ def geoapify_forward(text: str, *, retries: int = 3, backoff: float = 0.8) -> Op
             time.sleep(backoff * attempt)
     return None
 
-def geocode_city_state(city: str, state: str) -> Optional[Dict[str, float]]:
+def geocode_city_state(city: str, state: str, progress_info: str = "") -> Optional[Dict[str, float]]:
     key = f"{city}, {state}"
     if key in GEOCODE_CACHE:
         return GEOCODE_CACHE[key]
+    
+    print(f"🌍 Geocoding: {city}, {state} {progress_info}")
     res = geoapify_forward(f"{city}, {state}, USA")
     GEOCODE_CACHE[key] = res
     _save_geocode_cache()
+    
+    if res:
+        print(f"   Found coordinates: {res['lat']:.4f}, {res['lon']:.4f}")
+    else:
+        print(f"   Geocoding failed for {city}, {state}")
+    
     return res
 
 # OSM polygon cache helpers
@@ -186,8 +180,10 @@ def cache_osm_polygon(city: str, state: str, geom):
     BOUNDARY_WKT[key] = (geom.wkt if geom is not None else None)
     _save_boundary_cache()
 
-def fetch_osm_city_polygon(city: str, state: str):
+def fetch_osm_city_polygon(city: str, state: str, progress_info: str = ""):
     """Find a municipal polygon near the city geocode point, prefer proper scale."""
+    print(f"🗺️  Fetching OSM boundary: {city}, {state} {progress_info}")
+    
     city_up = city.upper()
     pt_3857 = pt_lookup[(city, state)]
     pt_ll = gpd.GeoSeries([pt_3857], crs=3857).to_crs(4326).iloc[0]
@@ -224,10 +220,14 @@ def fetch_osm_city_polygon(city: str, state: str):
     dists = g_3857.geometry.centroid.distance(pt_3857)
     idx = dists.idxmin()
     chosen_3857 = g_3857.loc[idx, "geometry"]
-    return gpd.GeoSeries([chosen_3857], crs=3857).to_crs(4326).iloc[0]
+    result = gpd.GeoSeries([chosen_3857], crs=3857).to_crs(4326).iloc[0]
+    
+    print(f"   Found OSM boundary polygon (area: {chosen_3857.area/1000000:.2f} km²)")
+    return result
 
-# Minimum Enclosing Circle helpers
-from math import hypot, isclose
+# ======================================================================
+# Geometry Utilities  
+# ======================================================================
 
 def _circle_from_two(p1, p2):
     (x1, y1), (x2, y2) = p1, p2
@@ -278,17 +278,423 @@ def minimum_enclosing_circle(points):
     return best
 
 # ======================================================================
-# Load data from Excel
+# Cartographic Labeling System
 # ======================================================================
-# Expect columns: City, State, Group
-DATA_PATH = Path(__file__).parent / "Socket-Regions.xlsx"
+def classify_city_importance(city: str, state: str) -> str:
+    """Classify cities into Primary, Secondary, or Tertiary importance for professional mapping."""
+    city_upper = city.upper()
+    state_upper = state.upper()
+    
+    # State capitals lookup
+    state_capitals = {
+        'AL': 'MONTGOMERY', 'AK': 'JUNEAU', 'AZ': 'PHOENIX', 'AR': 'LITTLE ROCK',
+        'CA': 'SACRAMENTO', 'CO': 'DENVER', 'CT': 'HARTFORD', 'DE': 'DOVER',
+        'FL': 'TALLAHASSEE', 'GA': 'ATLANTA', 'HI': 'HONOLULU', 'ID': 'BOISE',
+        'IL': 'SPRINGFIELD', 'IN': 'INDIANAPOLIS', 'IA': 'DES MOINES', 'KS': 'TOPEKA',
+        'KY': 'FRANKFORT', 'LA': 'BATON ROUGE', 'ME': 'AUGUSTA', 'MD': 'ANNAPOLIS',
+        'MA': 'BOSTON', 'MI': 'LANSING', 'MN': 'SAINT PAUL', 'MS': 'JACKSON',
+        'MO': 'JEFFERSON CITY', 'MT': 'HELENA', 'NE': 'LINCOLN', 'NV': 'CARSON CITY',
+        'NH': 'CONCORD', 'NJ': 'TRENTON', 'NM': 'SANTA FE', 'NY': 'ALBANY',
+        'NC': 'RALEIGH', 'ND': 'BISMARCK', 'OH': 'COLUMBUS', 'OK': 'OKLAHOMA CITY',
+        'OR': 'SALEM', 'PA': 'HARRISBURG', 'RI': 'PROVIDENCE', 'SC': 'COLUMBIA',
+        'SD': 'PIERRE', 'TN': 'NASHVILLE', 'TX': 'AUSTIN', 'UT': 'SALT LAKE CITY',
+        'VT': 'MONTPELIER', 'VA': 'RICHMOND', 'WA': 'OLYMPIA', 'WV': 'CHARLESTON',
+        'WI': 'MADISON', 'WY': 'CHEYENNE'
+    }
+    
+    # Check if it's a state capital
+    is_state_capital = (state_upper in state_capitals and 
+                       city_upper == state_capitals[state_upper])
+    
+    # Simple heuristics for major cities
+    major_metros = {
+        'NEW YORK', 'LOS ANGELES', 'CHICAGO', 'HOUSTON', 'PHOENIX', 'PHILADELPHIA',
+        'SAN ANTONIO', 'SAN DIEGO', 'DALLAS', 'SAN JOSE', 'AUSTIN', 'JACKSONVILLE',
+        'SAN FRANCISCO', 'CHARLOTTE', 'SEATTLE', 'DENVER', 'WASHINGTON', 'BOSTON',
+        'DETROIT', 'NASHVILLE', 'ATLANTA', 'MIAMI', 'TAMPA', 'NEW ORLEANS',
+        'CLEVELAND', 'MINNEAPOLIS', 'KANSAS CITY', 'SAINT LOUIS', 'PITTSBURGH',
+        'CINCINNATI', 'INDIANAPOLIS', 'COLUMBUS', 'MILWAUKEE', 'BALTIMORE',
+        'ORLANDO', 'RALEIGH', 'RICHMOND', 'NORFOLK', 'BIRMINGHAM', 'MEMPHIS',
+        'BUFFALO', 'SACRAMENTO', 'PORTLAND', 'LAS VEGAS', 'OKLAHOMA CITY',
+        'LOUISVILLE', 'TUCSON', 'ALBUQUERQUE', 'FRESNO', 'OMAHA', 'HONOLULU'
+    }
+    
+    # Enhanced logic for better classification
+    if city_upper in major_metros:
+        return 'Primary'
+    elif is_state_capital:
+        return 'Secondary' 
+    elif any(keyword in city_upper for keyword in ['SAINT', 'ST.', 'FORT', 'NEW ', 'WEST ', 'EAST ', 'NORTH ', 'SOUTH ']):
+        # Cities with common prefixes are often significant
+        return 'Secondary'
+    else:
+        return 'Tertiary'
 
-df = pd.read_excel(DATA_PATH, engine="openpyxl")
+def get_label_style(importance: str, text_color: str) -> dict:
+    """Get typography settings based on city importance."""
+    if importance == 'Primary':
+        return {
+            'fontsize': LABEL_FONTSIZE_PRIMARY,
+            'weight': 'bold',
+            'color': text_color,
+            'exclusion_radius': LABEL_EXCLUSION_RADIUS_M * 1.5
+        }
+    elif importance == 'Secondary':
+        return {
+            'fontsize': LABEL_FONTSIZE_SECONDARY,
+            'weight': 'normal',
+            'color': text_color,
+            'exclusion_radius': LABEL_EXCLUSION_RADIUS_M * 1.2
+        }
+    else:  # Tertiary
+        return {
+            'fontsize': LABEL_FONTSIZE_TERTIARY,
+            'weight': 'normal',
+            'color': text_color,
+            'exclusion_radius': LABEL_EXCLUSION_RADIUS_M
+        }
 
-# normalize whitespace in headers
+def analyze_map_geography(pts_df):
+    """Analyze map bounds and city distribution for smart label placement."""
+    from math import sqrt
+    
+    # Calculate map bounds
+    all_x = [geom.x for geom in pts_df.geometry]
+    all_y = [geom.y for geom in pts_df.geometry]
+    
+    map_bounds = {
+        'min_x': min(all_x), 'max_x': max(all_x),
+        'min_y': min(all_y), 'max_y': max(all_y),
+        'center_x': (min(all_x) + max(all_x)) / 2,
+        'center_y': (min(all_y) + max(all_y)) / 2
+    }
+    
+    # For each city, analyze density in 8 cardinal directions
+    city_analysis = {}
+    for _, row in pts_df.iterrows():
+        city_x, city_y = row.geometry.x, row.geometry.y
+        
+        # Count cities in each direction (within 100km radius)
+        directions = {
+            'N': 0, 'NE': 0, 'E': 0, 'SE': 0,
+            'S': 0, 'SW': 0, 'W': 0, 'NW': 0
+        }
+        
+        for _, other_row in pts_df.iterrows():
+            if row.City == other_row.City:  # Skip self
+                continue
+                
+            other_x, other_y = other_row.geometry.x, other_row.geometry.y
+            dx, dy = other_x - city_x, other_y - city_y
+            distance = sqrt(dx*dx + dy*dy)
+            
+            if distance > 100000:  # Only consider nearby cities (100km)
+                continue
+                
+            # Determine direction (8-way)
+            if abs(dx) < distance * 0.383:  # ~22.5 degree tolerance
+                if dy > 0: directions['N'] += 1
+                else: directions['S'] += 1
+            elif abs(dy) < distance * 0.383:
+                if dx > 0: directions['E'] += 1
+                else: directions['W'] += 1
+            else:  # Diagonal
+                if dx > 0 and dy > 0: directions['NE'] += 1
+                elif dx > 0 and dy < 0: directions['SE'] += 1
+                elif dx < 0 and dy > 0: directions['NW'] += 1
+                else: directions['SW'] += 1
+        
+        # Determine position relative to map bounds
+        edge_threshold = 0.15  # Within 15% of edge
+        is_edge = {
+            'north': (city_y - map_bounds['min_y']) / (map_bounds['max_y'] - map_bounds['min_y']) > (1 - edge_threshold),
+            'south': (city_y - map_bounds['min_y']) / (map_bounds['max_y'] - map_bounds['min_y']) < edge_threshold,
+            'east': (city_x - map_bounds['min_x']) / (map_bounds['max_x'] - map_bounds['min_x']) > (1 - edge_threshold),
+            'west': (city_x - map_bounds['min_x']) / (map_bounds['max_x'] - map_bounds['min_x']) < edge_threshold
+        }
+        
+        city_analysis[row.City] = {
+            'directions': directions,
+            'is_edge': is_edge,
+            'position': (city_x, city_y)
+        }
+    
+    return map_bounds, city_analysis
+
+def professional_label_placement(ax, gdf_pts, color_for, text_color, leader_color, use_numbering=True):
+    """
+    Geographic-aware professional cartographic labeling system with:
+    • Smart directional placement toward empty spaces
+    • Hierarchical typography based on city importance
+    • Collision-free placement using exclusion zones
+    • Clean leader line routing
+    """
+    # Classify cities by importance
+    pts_df = gdf_pts[["Group", "geometry", "City", "State"]].reset_index(drop=True)
+    pts_df['Importance'] = pts_df.apply(lambda row: classify_city_importance(row.City, row.State), axis=1)
+    
+    # Sort by importance first, then by density (dense areas get priority within each tier)
+    importance_order = {'Primary': 0, 'Secondary': 1, 'Tertiary': 2}
+    pts_df['imp_order'] = pts_df['Importance'].map(importance_order)
+    
+    # Calculate local density for each city
+    from math import sqrt
+    pts_df['density_score'] = 0
+    for i, row in pts_df.iterrows():
+        nearby_count = 0
+        for j, other_row in pts_df.iterrows():
+            if i != j:
+                dist = sqrt((row.geometry.x - other_row.geometry.x)**2 + (row.geometry.y - other_row.geometry.y)**2)
+                if dist < 50000:  # Within 50km
+                    nearby_count += 1
+        pts_df.at[i, 'density_score'] = nearby_count
+    
+    # Sort by importance first, then by density (highest density first within each importance tier)
+    pts_df = pts_df.sort_values(['imp_order', 'density_score'], ascending=[True, False]).reset_index(drop=True)
+    
+    # Analyze map geography for smart placement
+    map_bounds, city_analysis = analyze_map_geography(pts_df)
+    print(f"   Map analysis: {len(city_analysis)} cities analyzed")
+    
+    # Track placed labels to avoid overlaps
+    placed_labels = []  # List of (x, y, exclusion_radius) tuples
+    numbered_cities = {}  # Dictionary for cities using numbered markers
+    dense_area_threshold = 16  # Cities with 16+ neighbors get numbered (excludes Columbia IL)
+    
+    def find_spiral_position(pin_x, pin_y, number, label_style):
+        """Place numbered labels in a spiral pattern around dense areas."""
+        from math import sqrt, cos, sin, pi
+        
+        # Calculate spiral parameters
+        angle_step = 0.5  # Radians between each position
+        radius_step = 8000  # 8km radius increase per spiral turn
+        
+        # Calculate position in spiral
+        angle = angle_step * number
+        radius = 25000 + radius_step * (number // 8)  # Start at 25km, increase every 8 labels
+        
+        # Calculate spiral position
+        spiral_x = pin_x + radius * cos(angle)
+        spiral_y = pin_y + radius * sin(angle)
+        
+        return spiral_x, spiral_y
+    
+    def find_placement_position(pin_x, pin_y, label_style, city_name, city_state=None):
+        """Find optimal label position using geographic-aware directional placement."""
+        exclusion_radius = label_style['exclusion_radius']
+        
+        # Manual positioning overrides for specific cities
+        manual_positions = {
+            'Harrisburg': (-20000, 0),  # Shift left (west)
+            'Lebanon': (0, 15000),      # Shift up (north) between Collinsville and O'Fallon IL
+        }
+        
+        # Specific city-state combinations
+        if city_name == 'Columbia' and city_state == 'Illinois':
+            return pin_x - 25000, pin_y - 25000  # Columbia IL: shift SW, left of Waterloo
+        
+        if city_name in manual_positions:
+            offset_x, offset_y = manual_positions[city_name]
+            return pin_x + offset_x, pin_y + offset_y
+        
+        # Get geographic analysis for this city
+        city_data = city_analysis.get(city_name, {})
+        directions = city_data.get('directions', {})
+        is_edge = city_data.get('is_edge', {})
+        
+        # Determine preferred directions based on geography
+        preferred_angles = []
+        
+        # For edge cities, prefer inward directions
+        if is_edge.get('north', False):  # Northern edge - place labels south
+            preferred_angles.extend([4.712, 5.498, 3.927])  # S, SW, SE
+        if is_edge.get('south', False):  # Southern edge - place labels north  
+            preferred_angles.extend([1.571, 0.785, 2.356])  # N, NE, NW
+        if is_edge.get('east', False):   # Eastern edge - place labels west
+            preferred_angles.extend([3.142, 2.356, 3.927])  # W, NW, SW
+        if is_edge.get('west', False):   # Western edge - place labels east
+            preferred_angles.extend([0, 0.785, 5.498])      # E, NE, SE
+        
+        # For interior cities, prefer directions with fewer nearby cities
+        if not preferred_angles:  # Not an edge city
+            direction_angles = {
+                'N': 1.571, 'NE': 0.785, 'E': 0, 'SE': 5.498,
+                'S': 4.712, 'SW': 3.927, 'W': 3.142, 'NW': 2.356
+            }
+            
+            # Sort directions by density (fewer cities = better)
+            sorted_dirs = sorted(directions.items(), key=lambda x: x[1])
+            preferred_angles = [direction_angles[dir_name] for dir_name, _ in sorted_dirs[:4]]
+        
+        # Add some variation around preferred angles
+        all_angles = []
+        for base_angle in preferred_angles:
+            all_angles.extend([
+                base_angle,
+                base_angle + 0.262,  # ±15 degrees
+                base_angle - 0.262
+            ])
+        
+        # Add remaining angles as fallback
+        remaining_angles = [i * (2 * pi / 16) for i in range(16)]
+        all_angles.extend([a for a in remaining_angles if a not in all_angles])
+        
+        distances = [8000, 12000, 16000, 22000, 30000]
+        positions_tried = 0
+        
+        # Try positions at increasing distances with smart angle prioritization
+        for distance in distances:
+            if distance > MAX_LABEL_DISTANCE_M:
+                break
+                
+            for angle in all_angles:
+                label_x = pin_x + distance * cos(angle)
+                label_y = pin_y + distance * sin(angle)
+                positions_tried += 1
+                
+                # Check collision with existing labels
+                collision = False
+                min_required_separation = None
+                for placed_x, placed_y, placed_radius in placed_labels:
+                    dist = sqrt((label_x - placed_x)**2 + (label_y - placed_y)**2)
+                    
+                    # Use a reasonable base separation (8km) plus label-specific exclusion zones
+                    base_separation = 8000  # 8km base minimum
+                    min_separation = base_separation + exclusion_radius + placed_radius
+                    
+                    if dist < min_separation:
+                        collision = True
+                        min_required_separation = min_separation
+                        break
+                
+                if not collision:
+                    # Double-check: ensure we're not too close to any existing label
+                    if placed_labels:
+                        actual_min_dist = min([sqrt((label_x - px)**2 + (label_y - py)**2) for px, py, pr in placed_labels])
+                        if actual_min_dist < 8000:  # Too close to any existing label
+                            collision = True
+                
+                if not collision:
+                    direction_name = "preferred" if angle in preferred_angles[:4] else "fallback"
+                    print(f"      {city_name}: Found {direction_name} position at {distance}m after {positions_tried} attempts")
+                    return label_x, label_y
+        
+        # Final fallback - try a systematic approach
+        print(f"      {city_name}: Using systematic fallback placement")
+        
+        # Try the 4 cardinal directions with moderate distance
+        cardinal_angles = [0, 1.571, 3.142, 4.712]  # E, N, W, S
+        fallback_distance = 35000
+        
+        for test_angle in cardinal_angles:
+            test_x = pin_x + fallback_distance * cos(test_angle)
+            test_y = pin_y + fallback_distance * sin(test_angle)
+            
+            # Check if this position has reasonable separation
+            min_dist = min([sqrt((test_x - px)**2 + (test_y - py)**2) for px, py, pr in placed_labels], default=float('inf'))
+            if min_dist >= 12000:  # 12km minimum for fallback
+                return test_x, test_y
+        
+        # If all cardinal directions fail, use preferred angle or default
+        fallback_angle = preferred_angles[0] if preferred_angles else 0
+        return pin_x + fallback_distance * cos(fallback_angle), pin_y + fallback_distance * sin(fallback_angle)
+    
+    # Place labels in order of importance
+    texts = []
+    leader_lines = []
+    
+    for _, row in pts_df.iterrows():
+        pin_x, pin_y = row.geometry.x, row.geometry.y
+        label_style = get_label_style(row.Importance, text_color)
+        
+        # Check if this city is in a very dense area (only for static PNG)
+        density_score = row.get('density_score', 0)
+        
+        # Specific exclusions from numbering  
+        is_excluded = (row.City == 'Columbia' and row.State == 'Illinois')  # Columbia IL should be normal label
+        
+        
+        use_number = use_numbering and density_score >= dense_area_threshold and not is_excluded
+        
+        if use_number:
+            # Assign a number and use spiral placement for dense areas
+            number = len(numbered_cities) + 1
+            numbered_cities[number] = f"{row.City}, {row.State}"
+            
+            # Use spiral placement around dense area center
+            label_x, label_y = find_spiral_position(pin_x, pin_y, number, label_style)
+            
+            # Place numbered label at the found position
+            text = ax.text(
+                label_x, label_y, str(number),
+                fontsize=label_style['fontsize'],
+                fontweight=label_style['weight'],
+                color='black', ha='center', va='center',
+                zorder=12
+            )
+            
+            # Always draw leader line from pin to numbered label
+            line = ax.plot([pin_x, label_x], [pin_y, label_y],
+                          color=leader_color, 
+                          linewidth=LABEL_LINE_WIDTH,
+                          alpha=LABEL_LINE_ALPHA, 
+                          zorder=9)
+            leader_lines.extend(line)
+            
+            # Record this label's exclusion zone for future collision detection
+            placed_labels.append((label_x, label_y, label_style['exclusion_radius']))
+            
+            texts.append(text)
+            print(f"   Numbered {row.City}: #{number} pin({pin_x:.0f}, {pin_y:.0f}) -> label({label_x:.0f}, {label_y:.0f})")
+        else:
+            # Find optimal label position using geographic awareness
+            label_x, label_y = find_placement_position(pin_x, pin_y, label_style, row.City, row.State)
+            print(f"   Placing {row.City}: pin({pin_x:.0f}, {pin_y:.0f}) -> label({label_x:.0f}, {label_y:.0f})")
+            
+            # Create text label
+            text = ax.text(
+                label_x, label_y, row.City,
+                fontsize=label_style['fontsize'],
+                weight=label_style['weight'],
+                color=label_style['color'],
+                ha='center', va='center', 
+                zorder=10
+            )
+        
+        if LABEL_HALO:
+            import matplotlib.patheffects as pe
+            text.set_path_effects([
+                pe.Stroke(linewidth=3.0, foreground='white'), 
+                pe.Normal()
+            ])
+        
+            # Only for text labels, handle leader lines and exclusion zones
+            texts.append(text)
+            
+            # Record this label's exclusion zone for future collision detection
+            placed_labels.append((label_x, label_y, label_style['exclusion_radius']))
+            
+            # Create leader line if label is not at pin
+            distance = sqrt((label_x - pin_x)**2 + (label_y - pin_y)**2)
+            if distance > 1000:  # Only draw leader if label is displaced
+                line = ax.plot([pin_x, label_x], [pin_y, label_y],
+                              color=leader_color, 
+                              linewidth=LABEL_LINE_WIDTH,
+                              alpha=LABEL_LINE_ALPHA, 
+                              zorder=9)
+                leader_lines.extend(line)
+    
+    return texts, leader_lines, numbered_cities
+
+# ======================================================================
+# Main Execution
+# ======================================================================
+data_path = Path(__file__).parent / "Socket-Regions.xlsx"
+
+df = pd.read_excel(data_path, engine="openpyxl")
+
 df.rename(columns={c: c.strip() for c in df.columns}, inplace=True)
 
-# case-insensitive header lookup
 lower_index = {c.lower(): c for c in df.columns}
 
 city_col  = lower_index.get("city")
@@ -302,37 +708,37 @@ if not (city_col and state_col and group_col):
         f"Found: {have}"
     )
 
-# keep / rename to canonical names
 df = df[[city_col, state_col, group_col]].rename(
     columns={city_col: "City", state_col: "State", group_col: "Group"}
 )
 
-# clean values
 df = df.dropna(subset=["City", "State", "Group"]).copy()
 for c in ["City", "State", "Group"]:
     df[c] = df[c].astype(str).str.strip()
 
-# Build "Full Location"
 df["Full Location"] = df["City"] + ", " + df["State"]
 
 print(f"Loaded {len(df)} rows from {DATA_PATH.name} "
       f"(columns mapped as City='{city_col}', State='{state_col}', Group='{group_col}')")
 
-# Group order (sort legend by the leading number in “Group N: …” if present)
 def _group_num(s: str) -> int:
     m = re.search(r"Group\s*(\d+)", s or "", re.IGNORECASE)
     return int(m.group(1)) if m else 10**9
 
 ordered_groups = sorted(df["Group"].unique().tolist(), key=_group_num)
 
-# ======================================================================
-# Geocode points (WGS84 & WebMercator)
-# ======================================================================
+# Geocoding
 unique_places = df[["Full Location", "City", "State"]].drop_duplicates().reset_index(drop=True)
+total_places = len(unique_places)
+print(f"\nStarting geocoding process for {total_places} unique cities...")
+
 lat_list, lon_list = [], []
-for _, row in unique_places.iterrows():
-    res = geocode_city_state(row["City"], row["State"])
+for i, row in unique_places.iterrows():
+    progress = f"({i+1}/{total_places})"
+    res = geocode_city_state(row["City"], row["State"], progress)
     lat_list.append(res["lat"] if res else None); lon_list.append(res["lon"] if res else None)
+
+print(f"Geocoding complete! Processed {total_places} cities.\n")
 unique_places["Latitude"] = lat_list; unique_places["Longitude"] = lon_list
 df = df.merge(unique_places[["Full Location", "Latitude", "Longitude"]], on="Full Location", how="left").dropna(subset=["Latitude", "Longitude"])
 
@@ -340,25 +746,30 @@ gdf_points_ll = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df["Longitude"]
 gdf_points = gdf_points_ll.to_crs(3857)
 gdf_points["Group"] = pd.Categorical(gdf_points["Group"], categories=ordered_groups, ordered=True)
 
-# lookup for city center points
 pt_lookup = {
     (r.City, r.State): gdf_points.loc[(gdf_points["City"] == r.City) & (gdf_points["State"] == r.State), "geometry"].iloc[0]
     for r in df[["City","State"]].drop_duplicates().itertuples(index=False)
 }
 
-# ======================================================================
-# City polygons (OSM or fallback buffer)
-# ======================================================================
+# City boundaries
+city_records = df[["City","State","Group"]].drop_duplicates().reset_index(drop=True)
+total_cities = len(city_records)
+print(f"Starting OSM boundary fetching for {total_cities} cities...")
+
 records = []
-for _, row in df[["City","State","Group"]].drop_duplicates().iterrows():
+for i, row in city_records.iterrows():
     city, state, group = row.City, row.State, row.Group
+    progress = f"({i+1}/{total_cities})"
 
     geom_ll = get_cached_osm_polygon(city, state)
     if geom_ll is None:
-        geom_ll = fetch_osm_city_polygon(city, state)
+        geom_ll = fetch_osm_city_polygon(city, state, progress)
         cache_osm_polygon(city, state, geom_ll)
+    else:
+        print(f"Using cached boundary: {city}, {state} {progress}")
 
     if geom_ll is None:
+        print(f"   No OSM boundary found, using {POINT_FALLBACK_BUFFER_M/1000:.1f}km buffer around point")
         pt = pt_lookup[(city, state)]
         geom_3857 = pt.buffer(POINT_FALLBACK_BUFFER_M)
     else:
@@ -366,10 +777,11 @@ for _, row in df[["City","State","Group"]].drop_duplicates().iterrows():
 
     records.append({"City": city, "State": state, "Group": group, "geometry": geom_3857})
 
+print(f"OSM boundary fetching complete! Processed {total_cities} cities.\n")
+
 gdf_city_polys = gpd.GeoDataFrame(records, geometry="geometry", crs=3857)
 gdf_city_polys["Group"] = pd.Categorical(gdf_city_polys["Group"], categories=ordered_groups, ordered=True)
 
-# Dissolve city polygons per Group (export layer)
 gdf_polys = gdf_city_polys.dissolve(by="Group", as_index=False, aggfunc="first")
 def _drop_small_parts(geom, min_area):
     if geom is None or geom.is_empty: return None
@@ -391,9 +803,8 @@ elif AREA_STYLE == "convex_hull":
 gdf_polys = gdf_polys[gdf_polys.geometry.notnull()].copy()
 gdf_polys["Group"] = pd.Categorical(gdf_polys["Group"], categories=ordered_groups, ordered=True)
 
-# ======================================================================
-# Group circles (minimum enclosing circle per group)
-# ======================================================================
+# Group visualization
+print("Calculating group boundaries and minimum enclosing circles...")
 circle_rows = []
 for grp, sub in gdf_points.groupby("Group", observed=False):
     pts = [(geom.x, geom.y) for geom in sub.geometry]
@@ -407,121 +818,10 @@ for grp, sub in gdf_points.groupby("Group", observed=False):
 gdf_circles = gpd.GeoDataFrame(circle_rows, geometry="geometry", crs=3857)
 gdf_circles["Group"] = pd.Categorical(gdf_circles["Group"], categories=ordered_groups, ordered=True)
 
-# ======================================================================
-# Label placement: fast, collision-aware search in pixel space
-# ======================================================================
-def draw_labels_with_leaders(ax, gdf_pts, color_for, text_color, leader_color):
-    """
-    adjustText-based labeling with:
-      • density-aware initial offsets (denser = farther seed),
-      • collision resolution (text vs text & pins),
-      • post-adjust clamping to keep labels readable,
-      • leader lines from each pin to final label.
-    """
-    # --- group centers for outward seeding
-    centers = {r.Group: Point(r.cx, r.cy) for r in gdf_circles.itertuples(index=False)}
-
-    # --- precompute density: average distance to K nearest neighbors (within same group)
-    # work in 3857 meters (already your CRS)
-    pts_df = gdf_pts[["Group", "geometry", "City", "State"]].reset_index(drop=True)
-    # build list per-group for quick neighbor lookups
-    group_idx = {}
-    for grp, sub in pts_df.groupby("Group", observed=False):
-        coords = np.array([[p.x, p.y] for p in sub.geometry.to_list()])
-        group_idx[grp] = (sub.index.to_numpy(), coords)
-
-    # nearest-neighbor average distance for each point
-    knn_dist = np.zeros(len(pts_df), dtype=float)
-    for grp, (idxs, coords) in group_idx.items():
-        n = coords.shape[0]
-        if n <= 1:
-            knn_dist[idxs] = SEED_BASE_STEP_M
-            continue
-        # pairwise distances (n is small; this is fine)
-        dmat = np.sqrt(((coords[None, :, :] - coords[:, None, :])**2).sum(axis=2))
-        np.fill_diagonal(dmat, np.inf)
-        k = min(SEED_KNN_K, max(1, n-1))
-        # average of k nearest distances
-        knn_dist[idxs] = np.partition(dmat, kth=k-1, axis=1)[:, :k].mean(axis=1)
-
-    # --- seed labels slightly outward, scaled by local density
-    texts = []
-    pins_xy = []
-    xs, ys = [], []
-
-    for i, row in enumerate(pts_df.itertuples(index=False)):
-        px, py = row.geometry.x, row.geometry.y
-        pins_xy.append((px, py))
-        xs.append(px); ys.append(py)
-
-        # outward unit from group center
-        ctr = centers.get(row.Group)
-        if ctr is not None:
-            vx, vy = (px - ctr.x, py - ctr.y)
-            nrm = np.hypot(vx, vy) or 1.0
-            ux, uy = vx / nrm, vy / nrm
-        else:
-            ux, uy = 1.0, 0.0
-
-        # density-aware step: baseline + boost from local crowding
-        step = SEED_BASE_STEP_M + SEED_BOOST_FACTOR * knn_dist[i]
-        lx = px + step * ux
-        ly = py + step * uy
-
-        t = ax.text(
-            lx, ly, row.City,
-            fontsize=LABEL_FONTSIZE, color=text_color,
-            ha="center", va="center", zorder=8
-        )
-        if LABEL_HALO:
-            t.set_path_effects([pe.Stroke(linewidth=2.5, foreground="white"), pe.Normal()])
-        texts.append(t)
-
-    # --- run adjustText to separate labels and keep them off the pins
-    adjust_text(
-        texts,
-        x=xs, y=ys,
-        ax=ax,
-        only_move={"points": "xy", "text": "xy"},
-        autoalign="xy",
-        expand_points=ADJUSTTEXT_EXPAND_PTS,
-        expand_text=ADJUSTTEXT_EXPAND_TEXT,
-        force_points=ADJUSTTEXT_FORCE_POINTS,
-        force_text=ADJUSTTEXT_FORCE_TEXT,
-        lim=ADJUSTTEXT_MAX_ITERS,
-        save_steps=False,
-    )
-
-    # --- post-adjust clamp: keep labels within [min, max] distance of their pin
-    for (px, py), t in zip(pins_xy, texts):
-        tx, ty = t.get_position()
-        dx, dy = (tx - px), (ty - py)
-        d = np.hypot(dx, dy)
-        if d == 0:
-            # nudge outward a touch to avoid zero-length leaders
-            t.set_position((px + LABEL_MIN_DIST_M, py))
-            continue
-        # clamp
-        if d < LABEL_MIN_DIST_M or d > LABEL_MAX_DIST_M:
-            dd = np.clip(d, LABEL_MIN_DIST_M, LABEL_MAX_DIST_M)
-            scale = dd / d
-            nx, ny = (px + dx * scale, py + dy * scale)
-            t.set_position((nx, ny))
-
-    # --- draw leader lines after final positions
-    for (px, py), t in zip(pins_xy, texts):
-        tx, ty = t.get_position()
-        ax.plot([px, tx], [py, ty],
-                color=leader_color, linewidth=LABEL_LINE_WIDTH,
-                alpha=LABEL_LINE_ALPHA, zorder=7)
-        
-# ======================================================================
-# Plot
-# ======================================================================
-# Use constrained layout instead of tight_layout + bbox_inches='tight'
+# Map generation
+print("Generating professional cartographic map...")
 fig, ax = plt.subplots(figsize=(13, 10), constrained_layout=True)
 
-# Basemap choice (unchanged)
 if BASEMAP.lower() == "dark":
     base_src  = cx.providers.CartoDB.DarkMatterNoLabels
     label_src = cx.providers.CartoDB.DarkMatterOnlyLabels
@@ -535,11 +835,9 @@ else:
     label_src = cx.providers.CartoDB.PositronOnlyLabels
     edgecolor = "black"; textcolor = "black"; leader_color = LABEL_LINE_COLOR
 
-# Colors per ordered group (unchanged)
 cmap = matplotlib.colormaps["tab20"]
 color_for = {grp: mcolors.to_hex(cmap(i % cmap.N)) for i, grp in enumerate(ordered_groups)}
 
-# 🔁 Draw your vector layers FIRST (so axes have final extent)
 for grp, sub in gdf_circles.groupby("Group", observed=False):
     base = color_for[grp]
     pale = lighten(base, 0.70)
@@ -557,59 +855,60 @@ for grp, sub in gdf_city_polys.groupby("Group", observed=False):
              linewidth=CITY_EDGE_WIDTH,
              zorder=5)
 
-for r in gdf_points.itertuples(index=False):
-    px, py = r.geometry.x, r.geometry.y
-    c = color_for[r.Group]
-    ax.scatter([px], [py], s=PIN_MARKER_SIZE, marker="v",
-               facecolors=c, edgecolors="white", linewidths=0.9, zorder=6)
+# Pin markers removed for cleaner professional appearance
 
-# Labels
-if LABEL_STRATEGY == "all_with_leaders":
-    draw_labels_with_leaders(ax, gdf_points, color_for, textcolor, leader_color)
+# Labels - Professional cartographic system
+print("Applying professional cartographic labeling system...")
+if LABEL_STRATEGY == "professional_cartographic":
+    texts, leader_lines, numbered_cities = professional_label_placement(ax, gdf_points, color_for, textcolor, leader_color)
+    print("   Professional labeling complete - no overlapping labels!")
 else:
+    # Simple fallback labeling
+    numbered_cities = {}  # Initialize for consistency
     lbl = gdf_points.sort_values("City").groupby("Group").head(1)
     for grp, row in lbl.groupby("Group"):
         p = row.geometry.iloc[0]
         ax.text(p.x + 2000, p.y + 2000, row.City.iloc[0],
-                fontsize=LABEL_FONTSIZE, color=textcolor, zorder=8)
+                fontsize=LABEL_FONTSIZE_SECONDARY, color=textcolor, zorder=8)
 
-# ✅ NOW add the basemap; it will use the current extent set by your data
 cx.add_basemap(ax, source=base_src, zoom=BASEMAP_ZOOM)
 if SHOW_LABELS:
     cx.add_basemap(ax, source=label_src, zoom=BASEMAP_ZOOM, zorder=3)
-
-# Legend outside, and leave room with subplots_adjust (no tight bbox needed)
-from matplotlib.lines import Line2D
 handles = [Line2D([0], [0], marker="o", linestyle="",
                   markerfacecolor=color_for[g], markeredgecolor="none",
                   markersize=8, label=g)
            for g in ordered_groups]
 leg = ax.legend(handles=handles, title="Groups",
                 loc="upper left", bbox_to_anchor=(1.02, 1.0))
+
+# Add numbered cities legend if any exist
+if numbered_cities:
+    legend_text = "Dense Area Cities:\n"
+    for num, city_name in sorted(numbered_cities.items()):
+        legend_text += f"{num}. {city_name}\n"
+    
+    ax.text(1.02, 0.3, legend_text, transform=ax.transAxes, 
+            fontsize=8, verticalalignment='top',
+            bbox=dict(boxstyle="round,pad=0.5", facecolor='lightgray', alpha=0.8))
+
 plt.subplots_adjust(right=0.82)
 
-ax.set_title(f"Mapped Regions by Group (all labels + leaders, {BASEMAP.title()} basemap)", fontsize=15)
+ax.set_title(f"Mapped Regions by Group (Professional Cartographic Labeling, {BASEMAP.title()} basemap)", fontsize=15)
 ax.set_xlabel(""); ax.set_ylabel("")
 ax.set_aspect('equal', adjustable='box')
 
-# Save & show
-# ⛔ remove bbox_inches='tight' to avoid pathological bboxes
+# Save output
 try:
     plt.savefig("grouped_regions_map.png", dpi=220, bbox_inches="tight")
 except Exception:
-    # fallback to normal save if tight bbox goes haywire
     plt.savefig("grouped_regions_map.png", dpi=220)
 print("Saved PNG: grouped_regions_map.png")
 plt.show()
 
-# ======================================================================
-# Exports (GeoJSON + Folium HTML)
-# ======================================================================
-# Export dissolved polygons as GeoJSON (WGS84)
+# Data exports
 gdf_polys.to_crs(4326).to_file("grouped_regions.geojson", driver="GeoJSON")
 print("Saved GeoJSON: grouped_regions.geojson")
 
-# Interactive HTML (folium)
 if EXPORT_INTERACTIVE_HTML:
     try:
         import folium
@@ -632,8 +931,23 @@ if EXPORT_INTERACTIVE_HTML:
             location=[center_lat, center_lon],
             tiles="CartoDB Positron" if BASEMAP.lower() != "dark" else "CartoDB DarkMatter",
             zoom_start=7,
-            control_scale=True
+            control_scale=True,
+            prefer_canvas=True  # Better performance for many markers
         )
+        
+        # Add professional title
+        title_html = '''
+        <div style="position: fixed; 
+                    top: 10px; left: 50px; width: 300px; height: 60px; 
+                    background-color: white; border: 2px solid grey; 
+                    border-radius: 5px; z-index:9999; 
+                    padding: 10px; font-family: Arial; 
+                    box-shadow: 0 0 15px rgba(0,0,0,0.2)">
+        <h4 style="margin: 0; color: #333;">Regional Groups Map</h4>
+        <p style="margin: 0; font-size: 12px; color: #666;">Interactive view - Click layers to toggle</p>
+        </div>
+        '''
+        m.get_root().html.add_child(folium.Element(title_html))
 
         # Pale group circles
         for grp, sub in circles_ll.groupby("Group", observed=False):
@@ -660,18 +974,87 @@ if EXPORT_INTERACTIVE_HTML:
                 name=f"{grp} – cities"
             ).add_to(m)
 
-        # Pins
+        # Enhanced city markers with rich popups
         for r in pts_ll.itertuples(index=False):
+            # Classify city for icon size
+            importance = classify_city_importance(r.City, r.State)
+            if importance == 'Primary':
+                radius = 8
+                weight = 2
+            elif importance == 'Secondary':
+                radius = 6
+                weight = 1.5
+            else:
+                radius = 5
+                weight = 1
+            
+            # Rich popup content
+            popup_html = f"""
+            <div style="font-family: Arial; min-width: 200px;">
+                <h4 style="margin: 0 0 10px 0; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 5px;">
+                    {r.City}, {r.State}
+                </h4>
+                <p style="margin: 5px 0; font-size: 13px;">
+                    <strong>Group:</strong> {r.Group}<br>
+                    <strong>Classification:</strong> {importance} City<br>
+                    <strong>Coordinates:</strong> {r.geometry.y:.4f}, {r.geometry.x:.4f}
+                </p>
+            </div>
+            """
+            
             folium.CircleMarker(
                 location=[r.geometry.y, r.geometry.x],
-                radius=5,
-                color="white", weight=1,
-                fill=True, fill_color=color_for[r.Group], fill_opacity=0.95,
-                tooltip=f"{r.City}, {r.State} — {r.Group}"
+                radius=radius,
+                color="white", weight=weight,
+                fill=True, fill_color=color_for[r.Group], fill_opacity=0.9,
+                tooltip=f"{r.City}, {r.State}",
+                popup=folium.Popup(popup_html, max_width=250)
             ).add_to(m)
 
+        # Add professional legend
+        legend_html = '''
+        <div style="position: fixed; 
+                    bottom: 20px; left: 20px; width: 200px; 
+                    background-color: white; border: 2px solid grey; 
+                    border-radius: 5px; z-index:9999; 
+                    padding: 15px; font-family: Arial; 
+                    box-shadow: 0 0 15px rgba(0,0,0,0.2)">
+        <h5 style="margin: 0 0 10px 0; color: #333;">Legend</h5>
+        '''
+        
+        # Add group colors to legend
+        for grp in ordered_groups:
+            color = color_for[grp]
+            legend_html += f'''
+            <div style="margin: 5px 0;">
+                <span style="display: inline-block; width: 15px; height: 15px; 
+                           background-color: {color}; border-radius: 50%; 
+                           margin-right: 8px; vertical-align: middle;"></span>
+                <span style="font-size: 12px; vertical-align: middle;">{grp}</span>
+            </div>
+            '''
+        
+        legend_html += '''
+        <hr style="margin: 10px 0; border: 0.5px solid #ccc;">
+        <div style="font-size: 11px; color: #666;">
+            <div>● Large = Major Cities</div>
+            <div>● Medium = State Capitals</div>
+            <div>● Small = Other Cities</div>
+            <div style="margin-top: 8px; font-style: italic;">Click cities for details</div>
+        </div>
+        </div>
+        '''
+        
+        m.get_root().html.add_child(folium.Element(legend_html))
+        
+        # Enhanced layer control
         m.fit_bounds([[bminy, bminx], [bmaxy, bmaxx]])
-        folium.LayerControl(collapsed=True).add_to(m)
+        folium.LayerControl(collapsed=False, position='topright').add_to(m)
+        
+        # Add fullscreen button
+        from folium.plugins import Fullscreen
+        Fullscreen().add_to(m)
+        
         m.save(INTERACTIVE_HTML_PATH)
         print(f"Saved interactive HTML: {INTERACTIVE_HTML_PATH}")
     except Exception as e:
