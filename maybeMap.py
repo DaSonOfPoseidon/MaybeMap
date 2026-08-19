@@ -39,7 +39,7 @@ load_dotenv()
 # ======================================================================
 
 # Data sources
-DATA_PATH = Path(__file__).parent / "Socket-Regions.xlsx"
+DATA_PATH = Path(__file__).parent / "Socket-Regions-Future.xlsx"
 GEOAPIFY_KEY = os.getenv("GEOAPIFY_KEY")
 if not GEOAPIFY_KEY:
     raise RuntimeError("Missing GEOAPIFY_KEY in environment. Please set it in .env")
@@ -324,7 +324,7 @@ def classify_city_importance(city: str, state: str) -> str:
         return 'Primary'
     elif is_state_capital:
         return 'Secondary' 
-    elif any(keyword in city_upper for keyword in ['SAINT', 'ST.', 'FORT', 'NEW ', 'WEST ', 'EAST ', 'NORTH ', 'SOUTH ']):
+    elif any(keyword in city_upper for keyword in ['SAINT', 'ST.', 'FORT', 'WEST ', 'NORTH ', 'SOUTH ']):
         # Cities with common prefixes are often significant
         return 'Secondary'
     else:
@@ -689,7 +689,7 @@ def professional_label_placement(ax, gdf_pts, color_for, text_color, leader_colo
 # ======================================================================
 # Main Execution
 # ======================================================================
-data_path = Path(__file__).parent / "Socket-Regions.xlsx"
+data_path = Path(__file__).parent / "Socket-Regions-Future.xlsx"
 
 df = pd.read_excel(data_path, engine="openpyxl")
 
@@ -883,7 +883,7 @@ leg = ax.legend(handles=handles, title="Groups",
 
 # Add numbered cities legend if any exist
 if numbered_cities:
-    legend_text = "Dense Area Cities:\n"
+    legend_text = "STL Metro Cities:\n"
     for num, city_name in sorted(numbered_cities.items()):
         legend_text += f"{num}. {city_name}\n"
     
