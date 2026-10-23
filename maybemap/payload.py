@@ -1,6 +1,7 @@
 # Assembles everything the page draws into one JSON-serialisable dict. The page
 # itself holds no data of its own: every layer reads from this.
 
+import math
 from datetime import datetime
 from pathlib import Path
 
@@ -134,55 +135,82 @@ def build_outlines(boundaries: gpd.GeoDataFrame, cities: list[dict]) -> dict:
     return {"type": "FeatureCollection", "features": features}
 
 
-def build_places(cities: list[dict], techs: pd.DataFrame) -> tuple[list[dict], list[str]]:
-    # The dispatch set: every regioned town, plus each tech's home town whether or
-    # not it carries a region, since a tech nobody can route to is no use. Returns
-    # the places and the tech towns that had to be added from outside the regions.
-    places, index = [], {}
+def _miles(a: dict, b: dict) -> float:
+    lat1, lon1, lat2, lon2 = map(math.radians, (a["lat"], a["lon"], b["lat"], b["lon"]))
+    h = (
+        math.sin((lat2 - lat1) / 2) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
+    )
+    return 7917.5 * math.asin(math.sqrt(h))
+
+
+def region_hubs(cities: list[dict]) -> dict[str, tuple[str, str]]:
+    # Each region's most central town: the one with the least total straight-line
+    # distance to the region's other towns. Ties go to the name first in order.
+    by_region: dict[str, list[dict]] = {}
     for c in cities:
         if c["regioned"]:
-            index[(c["name"], c["state"])] = len(places)
-            places.append(
-                {
-                    "name": c["name"],
-                    "state": c["state"],
-                    "lat": c["lat"],
-                    "lon": c["lon"],
-                    "city": c["id"],
-                    "techs": [],
-                }
-            )
+            by_region.setdefault(c["region"], []).append(c)
+    hubs = {}
+    for region, towns in by_region.items():
+        hub = min(towns, key=lambda t: (sum(_miles(t, o) for o in towns), t["name"]))
+        hubs[region] = (hub["name"], hub["state"])
+    return hubs
+
+
+def build_places(cities: list[dict], techs: pd.DataFrame) -> dict:
+    # The dispatch set: every regioned town, plus each tech's home town whether or
+    # not it carries a region, since a tech nobody can route to is no use. A tech
+    # with no town is placed at the hub of their primary region instead; one with
+    # neither cannot be placed and is only listed.
+    places, index = [], {}
+
+    def add(name, state, lat, lon, city_id):
+        index[(name, state)] = len(places)
+        places.append(
+            {"name": name, "state": state, "lat": lat, "lon": lon, "city": city_id, "techs": []}
+        )
+
+    for c in cities:
+        if c["regioned"]:
+            add(c["name"], c["state"], c["lat"], c["lon"], c["id"])
 
     by_name = {(c["name"], c["state"]): c for c in cities}
-    added = []
+    hubs = region_hubs(cities)
+    out, added, unplaced = [], [], []
     for row in techs.itertuples(index=False):
-        key = (row.Town, row.State)
+        if row.Town and row.State:
+            key, basis = (row.Town, row.State), "town"
+        elif row.Region in hubs:
+            key, basis = hubs[row.Region], "region"
+        else:
+            unplaced.append(row.Tech)
+            continue
         if key not in index:
             city = by_name.get(key)
             if city is not None:
-                lat, lon, city_id = city["lat"], city["lon"], city["id"]
+                add(*key, city["lat"], city["lon"], city["id"])
             else:
-                res = geocode_city_state(row.Town, row.State)
+                res = geocode_city_state(*key)
                 if not res:
                     raise ValueError(
-                        f"Could not geocode {row.Town}, {row.State} for tech {row.Tech}. "
+                        f"Could not geocode {key[0]}, {key[1]} for tech {row.Tech}. "
                         f"Check the spelling in {DISPATCH_TECHS_PATH.name}."
                     )
-                lat, lon, city_id = round(res["lat"], 5), round(res["lon"], 5), None
-            index[key] = len(places)
-            places.append(
-                {
-                    "name": row.Town,
-                    "state": row.State,
-                    "lat": lat,
-                    "lon": lon,
-                    "city": city_id,
-                    "techs": [],
-                }
-            )
-            added.append(f"{row.Town}, {row.State}")
-        places[index[key]]["techs"].append(row.Tech)
-    return places, added
+                add(*key, round(res["lat"], 5), round(res["lon"], 5), None)
+            added.append(f"{key[0]}, {key[1]}")
+        places[index[key]]["techs"].append(len(out))
+        out.append(
+            {
+                "name": row.Tech,
+                "id": row.TechId or None,
+                "region": row.Region or None,
+                "departments": list(row.Departments),
+                "place": index[key],
+                "basis": basis,
+            }
+        )
+    return {"places": places, "techs": out, "added": added, "unplaced": unplaced}
 
 
 def build_staging(staging: pd.DataFrame, places: list[dict]) -> list[dict]:
@@ -223,9 +251,18 @@ def build(
     regioned = regioned.drop_duplicates(subset=["City", "State"])
     outlines = build_outlines(load_city_boundaries(regioned), cities)
 
-    places, added = build_places(cities, load_techs(techs_path))
-    if added:
-        print(f"Added tech towns with no region to the dispatch set: {', '.join(added)}")
+    roster = build_places(cities, load_techs(techs_path))
+    places = roster["places"]
+    if roster["added"]:
+        print(f"Added tech towns with no region to the dispatch set: {', '.join(roster['added'])}")
+    by_region = sum(t["basis"] == "region" for t in roster["techs"])
+    if by_region:
+        print(f"Placed {by_region} technicians with no town at their primary region's hub")
+    if roster["unplaced"]:
+        print(
+            f"Could not place {len(roster['unplaced'])} technicians with neither a town nor a "
+            f"known region: {', '.join(roster['unplaced'])}"
+        )
     staging = build_staging(load_staging(staging_path), places)
     meters, seconds = matrix([(p["lat"], p["lon"]) for p in places])
 
@@ -246,6 +283,13 @@ def build(
         ],
         "unassignedLabel": UNASSIGNED_GROUP_LABEL,
         "serviceTypes": [{"key": k, "label": k.title()} for k in SERVICE_TYPES.values()],
-        "dispatch": {"places": places, "meters": meters, "seconds": seconds},
+        "departments": sorted({d for t in roster["techs"] for d in t["departments"]}),
+        "dispatch": {
+            "places": places,
+            "techs": roster["techs"],
+            "unplaced": roster["unplaced"],
+            "meters": meters,
+            "seconds": seconds,
+        },
         "staging": staging,
     }

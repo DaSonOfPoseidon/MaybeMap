@@ -20,8 +20,15 @@ def rosters(tmp_path, monkeypatch):
     # Joplin is in the export with no region; Seneca is not in the export at all
     monkeypatch.setitem(geocoding.GEOCODE_CACHE, "Seneca, Missouri", {"lat": 36.84, "lon": -94.61})
     techs = tmp_path / "techs.csv"
+    # Eve has no town, only a region; Fay has neither and cannot be placed
     techs.write_text(
-        "Tech,Town,State\nAda,Columbia,MO\nBo,Joplin,MO\nCy,Seneca,MO\nDee,Columbia,MO\n"
+        "Tech,Town,State,Primary Region,Departments\n"
+        'Ada,Columbia,MO,Group 2: Central,"FIELD, TC"\n'
+        "Bo,Joplin,MO,,FIELD\n"
+        "Cy,Seneca,MO,,FIELDBUS\n"
+        "Dee,Columbia,MO,,FIELD\n"
+        "Eve,,,Group 2: Central,TC\n"
+        "Fay,,,,FIELD\n"
     )
     staging = tmp_path / "staging.csv"
     staging.write_text("Type,Town,State\nGenerator,Columbia,MO\nGenerator,Seneca,MO\n")
@@ -64,7 +71,8 @@ def test_dispatch_set_is_regioned_towns_plus_tech_towns(built):
     places = {p["name"]: p for p in built["dispatch"]["places"]}
     regioned = {c["name"] for c in built["cities"] if c["region"] != UNASSIGNED_GROUP_LABEL}
     assert set(places) == regioned | {"Joplin", "Seneca"}
-    assert places["Columbia"]["techs"] == ["Ada", "Dee"]
+    techs = built["dispatch"]["techs"]
+    assert [techs[t]["name"] for t in places["Columbia"]["techs"]] == ["Ada", "Dee", "Eve"]
     assert places["Seneca"]["city"] is None
     assert places["Joplin"]["city"] is not None
 
@@ -104,3 +112,56 @@ def test_customer_buckets_cover_zero(built):
     # A town listed with no customers must land in a bucket, or no filter can hide it
     first = built["buckets"][0]
     assert first["lo"] == 0 and first["label"] == "0-5"
+
+
+def test_techs_carry_their_basis_and_departments(built):
+    techs = {t["name"]: t for t in built["dispatch"]["techs"]}
+    assert techs["Ada"]["basis"] == "town" and techs["Ada"]["departments"] == ["FIELD", "TC"]
+    # No town: placed at the hub of their primary region, and marked as such
+    assert techs["Eve"]["basis"] == "region"
+    assert built["dispatch"]["places"][techs["Eve"]["place"]]["name"] == "Columbia"
+    assert "Fay" not in techs
+    assert built["dispatch"]["unplaced"] == ["Fay"]
+    assert built["departments"] == ["FIELD", "FIELDBUS", "TC"]
+
+
+def test_a_region_hub_is_its_most_central_town():
+    towns = [
+        {
+            "id": 0,
+            "name": "West End",
+            "state": "MO",
+            "region": "R",
+            "regioned": True,
+            "lat": 38.0,
+            "lon": -94.0,
+        },
+        {
+            "id": 1,
+            "name": "Middle",
+            "state": "MO",
+            "region": "R",
+            "regioned": True,
+            "lat": 38.0,
+            "lon": -93.0,
+        },
+        {
+            "id": 2,
+            "name": "East End",
+            "state": "MO",
+            "region": "R",
+            "regioned": True,
+            "lat": 38.0,
+            "lon": -92.0,
+        },
+        {
+            "id": 3,
+            "name": "Elsewhere",
+            "state": "MO",
+            "region": "S",
+            "regioned": True,
+            "lat": 40.0,
+            "lon": -90.0,
+        },
+    ]
+    assert payload.region_hubs(towns) == {"R": ("Middle", "MO"), "S": ("Elsewhere", "MO")}
