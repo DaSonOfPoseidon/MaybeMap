@@ -87,8 +87,9 @@ region in the export.
 
 Drive times come from OSRM's public `table` service, using the fastest route between town
 centers with no live traffic. They are fetched **at build time** and cached per pair in
-`cache/osrm_matrix.json`. A rebuild with the same towns makes no requests, and a new town
-costs one request for its own row and column. If OSRM cannot answer, the build stops
+`cache/osrm_matrix.json`. A rebuild with the same towns makes no requests. A new town
+only needs its own row and column fetched, sent in blocks of up to 50 places
+(`OSRM_CHUNK`), so with around 90 towns that comes to about three requests. If OSRM cannot answer, the build stops
 rather than write a map with missing drive times.
 
 The route lines are straight connectors. They are not road shapes.

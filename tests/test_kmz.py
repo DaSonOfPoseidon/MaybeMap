@@ -89,3 +89,10 @@ def test_rejects_malformed_kml_color(bad):
 def test_darken_scales_each_channel():
     assert darken("#ffffff", 0.5) == "#808080"
     assert darken("#0070ff", 0.0) == "#0070ff"
+
+
+def test_description_labels_decode_html_entities():
+    from maybemap.sources.kmz import _label_from_description
+
+    desc = "<table><tr><td>Area</td><td><b>North &amp; East</b></td></tr></table>"
+    assert _label_from_description(desc) == "North & East"

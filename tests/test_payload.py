@@ -98,3 +98,9 @@ def test_staging_at_an_unknown_town_raises(
             staging_path=staging,
             matrix=fake_matrix,
         )
+
+
+def test_customer_buckets_cover_zero(built):
+    # A town listed with no customers must land in a bucket, or no filter can hide it
+    first = built["buckets"][0]
+    assert first["lo"] == 0 and first["label"] == "0-5"

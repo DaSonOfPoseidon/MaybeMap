@@ -15,6 +15,7 @@ from maybemap.config import (
     OSRM_RETRIES,
     OSRM_RETRY_PAUSE_S,
 )
+from maybemap.files import write_text_atomic
 
 MATRIX_CACHE_PATH = CACHE_DIR / "osrm_matrix.json"
 
@@ -33,14 +34,13 @@ def _pair_key(a: str, b: str) -> str:
 
 def load_cache(path=MATRIX_CACHE_PATH) -> dict[str, list[float]]:
     try:
-        return json.loads(path.read_text() or "{}")
+        return json.loads(path.read_text(encoding="utf-8") or "{}")
     except FileNotFoundError, json.JSONDecodeError:
         return {}
 
 
 def save_cache(cache: dict, path=MATRIX_CACHE_PATH):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(cache, indent=0, sort_keys=True))
+    write_text_atomic(path, json.dumps(cache, indent=0, sort_keys=True))
 
 
 def _chunks(items: list[int], size: int) -> list[list[int]]:

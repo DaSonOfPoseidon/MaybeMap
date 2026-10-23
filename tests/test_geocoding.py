@@ -388,3 +388,71 @@ def test_scattered_misses_are_cached_once_the_run_finishes(monkeypatch, spreadsh
     # Every answer is kept: the hits, and the misses the run proved were genuine
     assert set(cached) == set(seen)
     assert sum(g is None for g in cached.values()) == 2
+
+
+def test_overpass_never_substitutes_a_neighboring_town(monkeypatch):
+    # Only other municipalities came back: drawing the nearest of them would put a
+    # neighbor's city limits on this town
+    frame = gpd.GeoDataFrame({"name": ["Somewhere Else"]}, geometry=[BOUNDARY], crs=4326)
+    monkeypatch.setattr(geocoding.ox, "features_from_point", lambda *a, **k: frame)
+    assert _fetch() is None
+
+
+@pytest.mark.parametrize("osm_name", ["St. Nowhere", "Saint Nowhere", "ST NOWHERE"])
+def test_overpass_matches_saint_spellings(monkeypatch, osm_name):
+    frame = gpd.GeoDataFrame({"name": [osm_name]}, geometry=[BOUNDARY], crs=4326)
+    monkeypatch.setattr(geocoding.ox, "features_from_point", lambda *a, **k: frame)
+    got = geocoding.fetch_osm_city_polygon("Saint Nowhere", "Missouri", POINT)
+    assert got.symmetric_difference(BOUNDARY).area < 1e-9
+
+
+def test_a_town_listed_twice_gets_one_boundary(monkeypatch, tmp_path, seeded_cache):
+    from maybemap.sources import cities
+
+    path = tmp_path / "dupes.csv"
+    path.write_text(
+        "City,County,State,Region\nColumbia,Boone,MO,Central\nColumbia,Howard,MO,North\n"
+    )
+    asked = []
+    monkeypatch.setattr(cities, "get_cached_osm_polygon", lambda *a, **k: geocoding.NOT_CACHED)
+    monkeypatch.setattr(cities, "cache_osm_polygon", lambda *a, **k: None)
+    monkeypatch.setattr(
+        cities, "fetch_osm_city_polygon", lambda c, *a, **k: asked.append(c) or BOUNDARY
+    )
+    points, _ = cities.load_city_points(path)
+    boundaries = cities.load_city_boundaries(points)
+    assert asked == ["Columbia"]
+    assert len(boundaries) == 1
+
+
+def test_no_towns_means_an_empty_boundary_frame(spreadsheet, seeded_cache):
+    from maybemap.sources import cities
+
+    points, _ = cities.load_city_points(spreadsheet)
+    empty = cities.load_city_boundaries(points.iloc[0:0])
+    assert empty.empty and empty.crs.to_epsg() == 3857 and "geometry" in empty
+
+
+def test_cached_hits_do_not_hide_a_run_of_fresh_misses(monkeypatch, tmp_path, seeded_cache):
+    # Cached boundaries interleaved with an outage say nothing about the outage:
+    # only a fresh hit shows the lookup is working
+    from maybemap.sources import cities
+
+    path = tmp_path / "mixed.csv"
+    rows = ["Kansas City", "Columbia", "Saint Louis", "Springfield", "Joplin", "Cape Girardeau"]
+    path.write_text("City,State,Region\n" + "".join(f"{c},MO,R\n" for c in rows))
+    warm = {"Kansas City", "Saint Louis", "Joplin"}
+    cached = []
+    monkeypatch.setattr(cities, "OSM_MAX_CONSECUTIVE_FALLBACKS", 3)
+    monkeypatch.setattr(
+        cities,
+        "get_cached_osm_polygon",
+        lambda c, s: BOUNDARY if c in warm else geocoding.NOT_CACHED,
+    )
+    monkeypatch.setattr(cities, "fetch_osm_city_polygon", lambda *a, **k: None)
+    monkeypatch.setattr(cities, "cache_osm_polygon", lambda c, s, g: cached.append(c))
+    points, _ = cities.load_city_points(path)
+
+    with pytest.raises(RuntimeError, match="3 cities in a row"):
+        cities.load_city_boundaries(points)
+    assert cached == []

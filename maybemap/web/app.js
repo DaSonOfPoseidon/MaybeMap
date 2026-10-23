@@ -668,7 +668,13 @@ function renderLegend() {
 }
 
 // ---------- Notes export / import ----------
-function escapeCSV(v) { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+// A cell starting with = + - @ (or a tab or CR) is a formula to Excel and its kin,
+// and notes can arrive from anyone's import, so those get a leading apostrophe
+function escapeCSV(v) {
+  let s = String(v ?? '');
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
 function csvParse(s) {
   const rows = []; let fields = [], cur = '', quoted = false;
   for (let i = 0; i < s.length; i++) {

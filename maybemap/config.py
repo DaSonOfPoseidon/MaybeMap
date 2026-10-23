@@ -50,8 +50,10 @@ REGION_PALETTE = [
     "#5e35b1",
 ]
 
-# Customer-count filter buckets: inclusive (low, high) pairs, the last open-ended
-CUSTOMER_BUCKETS = [(1, 5), (6, 10), (11, 20), (21, None)]
+# Customer-count filter buckets: inclusive (low, high) pairs, the last open-ended.
+# They start at 0 so a town the export lists with no customers is still filterable;
+# only a town with no count at all escapes the filter.
+CUSTOMER_BUCKETS = [(0, 5), (6, 10), (11, 20), (21, None)]
 # Service Mix values the filter knows; anything else is left out of that filter
 SERVICE_TYPES = {
     "Business Only": "business",

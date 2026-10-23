@@ -53,3 +53,59 @@ def test_nan_is_refused():
 def test_write_creates_the_output_folder(tmp_path):
     out = page.write(PAYLOAD, tmp_path / "nested" / "map.html")
     assert out.exists()
+
+
+def test_a_failed_write_keeps_the_previous_map(tmp_path, monkeypatch):
+    # A lone surrogate cannot be encoded, so the write fails partway through --
+    # after a plain write_text has already truncated the old map
+    out = tmp_path / "map.html"
+    out.write_text("previous complete map")
+    monkeypatch.setattr(page, "render", lambda payload: "<html>" + "\udcff")
+    with pytest.raises(UnicodeEncodeError):
+        page.write(PAYLOAD, out)
+    assert out.read_text() == "previous complete map"
+    assert [p.name for p in tmp_path.iterdir()] == ["map.html"]
+
+
+def test_assets_are_read_and_written_as_utf8(tmp_path, monkeypatch):
+    # The page declares utf-8 and app.js carries non-ASCII, so no file access may
+    # fall back to the locale's encoding (cp1252 on a stock Windows install)
+    import pathlib
+
+    seen = []
+    for name in ("read_text", "write_text"):
+        original = getattr(pathlib.Path, name)
+
+        def checked(self, *args, _original=original, _name=name, **kwargs):
+            seen.append((_name, kwargs.get("encoding")))
+            return _original(self, *args, **kwargs)
+
+        monkeypatch.setattr(pathlib.Path, name, checked)
+    page.write(PAYLOAD, tmp_path / "map.html")
+    assert seen and all(enc == "utf-8" for _, enc in seen)
+
+
+def test_atomic_writes_cover_the_caches_too(tmp_path, monkeypatch):
+    # The boundary cache is the slowest thing to rebuild; a truncated one used to
+    # read back as empty
+    from maybemap import files, geocoding
+
+    target = tmp_path / "boundaries.json"
+    target.write_text('{"KEPT": null}')
+    monkeypatch.setattr(geocoding, "BOUNDARY_CACHE_PATH", target)
+    monkeypatch.setattr(geocoding, "BOUNDARY_WKT", {"NEW": None})
+
+    def interrupted(src, dst):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(files.os, "replace", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        geocoding._save_boundary_cache()
+    assert target.read_text() == '{"KEPT": null}'
+    assert [p.name for p in tmp_path.iterdir()] == ["boundaries.json"]
+
+
+def test_atomic_write_creates_folders(tmp_path):
+    from maybemap import files
+
+    assert files.write_text_atomic(tmp_path / "x" / "y.txt", "ok").read_text() == "ok"

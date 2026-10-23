@@ -3,6 +3,7 @@
 
 import json
 import os
+import re
 import time
 
 import geopandas as gpd
@@ -23,6 +24,7 @@ from maybemap.config import (
     PROJECT_ROOT,
     SEARCH_RADIUS_M,
 )
+from maybemap.files import write_text_atomic
 from maybemap.states import state_abbrev, state_full
 
 # Anchored to the project root so the key is found regardless of CWD
@@ -40,11 +42,11 @@ BOUNDARY_CACHE_PATH = CACHE_DIR / "osm_boundaries.json"
 
 
 def _load_cache(path) -> dict:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.touch(exist_ok=True)
+    # Read-only: the file is created by the first save, so importing this module
+    # (as the tests do) never writes anything
     try:
-        return json.loads(path.read_text() or "{}")
-    except json.JSONDecodeError:
+        return json.loads(path.read_text(encoding="utf-8") or "{}")
+    except FileNotFoundError, json.JSONDecodeError:
         return {}
 
 
@@ -52,12 +54,16 @@ GEOCODE_CACHE: dict[str, dict[str, float] | None] = _load_cache(GEOCODE_CACHE_PA
 BOUNDARY_WKT: dict[str, str | None] = _load_cache(BOUNDARY_CACHE_PATH)
 
 
+def _save(path, cache: dict):
+    write_text_atomic(path, json.dumps(cache, indent=2))
+
+
 def _save_geocode_cache():
-    GEOCODE_CACHE_PATH.write_text(json.dumps(GEOCODE_CACHE, indent=2))
+    _save(GEOCODE_CACHE_PATH, GEOCODE_CACHE)
 
 
 def _save_boundary_cache():
-    BOUNDARY_CACHE_PATH.write_text(json.dumps(BOUNDARY_WKT, indent=2))
+    _save(BOUNDARY_CACHE_PATH, BOUNDARY_WKT)
 
 
 def _require_api_key() -> str:
@@ -242,10 +248,15 @@ def _boundary_from_nominatim(city: str, state: str, county: str = ""):
     return None
 
 
+def _name_key(name: str) -> str:
+    # OSM and the export disagree on "St." / "Saint" and on punctuation
+    words = re.sub(r"[^A-Z ]", " ", name.upper()).split()
+    return " ".join("SAINT" if w == "ST" else "FORT" if w == "FT" else w for w in words)
+
+
 def _boundary_from_overpass(city: str, state: str, pt_3857):
     # Fallback for places Nominatim cannot name-match. Heavy: two wide-radius
     # queries that pull thousands of features to keep one, so it is a last resort.
-    city_up = city.upper()
     pt_ll = gpd.GeoSeries([pt_3857], crs=3857).to_crs(4326).iloc[0]
     center = (pt_ll.y, pt_ll.x)  # (lat, lon)
 
@@ -266,11 +277,13 @@ def _boundary_from_overpass(city: str, state: str, pt_3857):
     if g.empty:
         return None
 
-    if "name" in g.columns and g["name"].notna().any():
-        g["NAME_UP"] = g["name"].str.upper()
-        exact = g[g["NAME_UP"] == city_up]
-        if not exact.empty:
-            g = exact
+    # Only a candidate carrying this town's own name will do. Falling back to the
+    # nearest polygon drew a neighboring town's limits on unincorporated places.
+    if "name" not in g.columns:
+        return None
+    g = g[g["name"].map(lambda n: isinstance(n, str) and _name_key(n) == _name_key(city))]
+    if g.empty:
+        return None
 
     g_3857 = g.to_crs(3857).copy()
     g_3857["__area"] = g_3857.geometry.area

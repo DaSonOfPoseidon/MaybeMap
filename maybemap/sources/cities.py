@@ -179,7 +179,9 @@ def load_city_boundaries(gdf_points):
     }
 
     city_records = (
-        gdf_points[["City", "State", "Group", "County"]].drop_duplicates().reset_index(drop=True)
+        gdf_points[["City", "State", "Group", "County"]]
+        .drop_duplicates(subset=["City", "State"])
+        .reset_index(drop=True)
     )
     total_cities = len(city_records)
     print(f"Starting OSM boundary fetching for {total_cities} cities...")
@@ -228,7 +230,9 @@ def load_city_boundaries(gdf_points):
                 )
             geom_3857 = None
         else:
-            consecutive_fallbacks = 0
+            # A cached hit says nothing about whether the lookup works right now
+            if fetched:
+                consecutive_fallbacks = 0
             geom_3857 = gpd.GeoSeries([geom_ll], crs=4326).to_crs(3857).iloc[0]
 
         records.append({"City": city, "State": state, "Group": group, "geometry": geom_3857})
@@ -240,4 +244,6 @@ def load_city_boundaries(gdf_points):
         f"{total_cities - total_fallbacks} with real boundaries and "
         f"{total_fallbacks} kept as dots.\n"
     )
-    return gpd.GeoDataFrame(records, geometry="geometry", crs=3857)
+    # Spelled out so an empty run still has a geometry column to build on
+    frame = pd.DataFrame(records, columns=["City", "State", "Group", "geometry"])
+    return gpd.GeoDataFrame(frame, geometry="geometry", crs=3857)

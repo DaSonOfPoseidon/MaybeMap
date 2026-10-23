@@ -75,6 +75,16 @@ def city_csv(tmp_path):
     return path
 
 
+@pytest.fixture(autouse=True)
+def isolated_caches(monkeypatch, tmp_path):
+    # Every test starts from empty caches that live in its own temp folder, so a
+    # developer's real cache can neither answer a lookup nor be written to
+    monkeypatch.setattr(geocoding, "GEOCODE_CACHE", {})
+    monkeypatch.setattr(geocoding, "BOUNDARY_WKT", {})
+    monkeypatch.setattr(geocoding, "GEOCODE_CACHE_PATH", tmp_path / "geocodes.json")
+    monkeypatch.setattr(geocoding, "BOUNDARY_CACHE_PATH", tmp_path / "boundaries.json")
+
+
 @pytest.fixture
 def seeded_cache(monkeypatch):
     # Keyed the way geocoding keys it -- on the spelled-out state name

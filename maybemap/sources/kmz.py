@@ -5,6 +5,7 @@
 # see the zone name anyway -- these exports carry no <ExtendedData>, so the name
 # only exists inside an HTML table in the <description> CDATA.
 
+import html
 import re
 import zipfile
 from pathlib import Path
@@ -59,7 +60,7 @@ def _label_from_description(description: str, name_fields=DEFAULT_NAME_FIELDS) -
     for field_name in name_fields:
         match = re.search(_DESC_ROW.format(field=re.escape(field_name)), description, re.S | re.I)
         if match:
-            value = re.sub(r"<[^>]+>", "", match.group(1)).strip()
+            value = html.unescape(re.sub(r"<[^>]+>", "", match.group(1))).strip()
             if value:
                 return value
     return ""
