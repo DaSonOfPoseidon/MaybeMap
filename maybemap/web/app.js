@@ -669,10 +669,14 @@ function renderLegend() {
 
 // ---------- Notes export / import ----------
 // A cell starting with = + - @ (or a tab or CR) is a formula to Excel and its kin,
-// and notes can arrive from anyone's import, so those get a leading apostrophe
+// and notes can arrive from anyone's import, so those get a leading apostrophe.
+// Apostrophes already in front of such a cell get one more, so the import can
+// always take exactly one away and every note survives the round trip unchanged.
+const FORMULA_LEAD = /^'*[=+\-@\t\r]/;
+function guardFormula(s) { return FORMULA_LEAD.test(s) ? "'" + s : s; }
+function unguardFormula(s) { return s.startsWith("'") && FORMULA_LEAD.test(s.slice(1)) ? s.slice(1) : s; }
 function escapeCSV(v) {
-  let s = String(v ?? '');
-  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  const s = guardFormula(String(v ?? ''));
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 function csvParse(s) {
@@ -724,7 +728,7 @@ $('#notesImportInput').addEventListener('change', async e => {
       const name = String(cells[ti] || '').trim().toLowerCase();
       const st = si >= 0 ? String(cells[si] || '').trim().toUpperCase() : '';
       const key = allKeys.find(k => { const [n, s] = k.split('|'); return n.toLowerCase() === name && (!st || s === st); });
-      if (key) { notes[key] = String(cells[ni] || ''); imported++; }
+      if (key) { notes[key] = unguardFormula(String(cells[ni] || '')); imported++; }
     }
     writeStore(NOTES_KEY, notes);
     renderCard();
