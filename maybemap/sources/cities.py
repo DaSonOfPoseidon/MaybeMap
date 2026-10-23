@@ -15,6 +15,7 @@ from maybemap.config import (
 )
 from maybemap.geocoding import (
     NOT_CACHED,
+    FallbackUnavailable,
     cache_osm_polygon,
     fetch_osm_city_polygon,
     geocode_city_state,
@@ -217,6 +218,8 @@ def load_city_boundaries(gdf_points):
     # hit, or the run finishing without tripping the outage check -- so the misses
     # that do trip it are never cached as permanent "no boundary" answers
     pending_misses = []
+    # Towns whose only remaining lookup (Overpass) was unreachable this build
+    unavailable = []
     for i, row in city_records.iterrows():
         city, state, group = row.City, row.State, row.Group
         progress = f"({i + 1}/{total_cities})"
@@ -224,9 +227,16 @@ def load_city_boundaries(gdf_points):
         geom_ll = get_cached_osm_polygon(city, state)
         fetched = geom_ll is NOT_CACHED
         if fetched:
-            geom_ll = fetch_osm_city_polygon(
-                city, state, pt_lookup[(city, state)], progress, county=row.County
-            )
+            try:
+                geom_ll = fetch_osm_city_polygon(
+                    city, state, pt_lookup[(city, state)], progress, county=row.County
+                )
+            except FallbackUnavailable as exc:
+                # Not a miss and not cached: a dot this build, asked again next time
+                print(f"   {exc}")
+                unavailable.append(f"{city}, {state}")
+                records.append({"City": city, "State": state, "Group": group, "geometry": None})
+                continue
             if geom_ll is None:
                 pending_misses.append((city, state))
             else:
@@ -264,6 +274,12 @@ def load_city_boundaries(gdf_points):
 
     for missed in pending_misses:
         cache_osm_polygon(*missed, None)
+    if unavailable:
+        print(
+            f"WARNING: Overpass was unreachable for {len(unavailable)} towns, drawn as dots "
+            f"this build and not cached, so the next build tries again: "
+            f"{', '.join(unavailable)}"
+        )
     print(
         f"OSM boundary fetching complete! Processed {total_cities} cities, "
         f"{total_cities - total_fallbacks} with real boundaries and "

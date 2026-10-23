@@ -21,6 +21,7 @@ from maybemap.config import (
     MAX_CANDIDATE_AREA_M2,
     OSM_FETCH_RETRIES,
     OSM_FETCH_RETRY_PAUSE_S,
+    OSM_REQUEST_TIMEOUT_S,
     PROJECT_ROOT,
     SEARCH_RADIUS_M,
 )
@@ -33,6 +34,16 @@ load_dotenv(PROJECT_ROOT / ".env")
 ox.settings.use_cache = True
 ox.settings.cache_folder = str(CACHE_DIR / "osmnx")
 ox.settings.log_console = False
+ox.settings.requests_timeout = OSM_REQUEST_TIMEOUT_S
+
+
+class FallbackUnavailable(RuntimeError):
+    # Overpass, the fallback for towns Nominatim cannot name-match, could not be
+    # reached. Unlike a failed Nominatim lookup this does not end the build: the
+    # town is drawn as a dot this once, nothing is cached, and the next build asks
+    # again.
+    pass
+
 
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "MaybeMap/1.0"})
@@ -307,7 +318,10 @@ def fetch_osm_city_polygon(
         # An Overpass outage raises out of here rather than becoming None: the
         # caller caches None as "no boundary", which would keep the town a dot
         # long after the network came back
-        geom_ll = _boundary_from_overpass(city, state, pt_3857)
+        try:
+            geom_ll = _boundary_from_overpass(city, state, pt_3857)
+        except RuntimeError as exc:
+            raise FallbackUnavailable(str(exc)) from exc
         source = "Overpass"
     if geom_ll is None:
         return None

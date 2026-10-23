@@ -110,7 +110,10 @@ The route lines are straight connectors. They are not road shapes.
 
 Outlines come from Nominatim (with the county, to separate cities from same-named
 counties), with an Overpass fallback. They are cached in `cache/osm_boundaries.json`.
-Missing a few boundaries is normal, and those towns just keep their dot. A long unbroken
+Missing a few boundaries is normal, and those towns just keep their dot. If Overpass (the
+fallback) is unreachable, the affected towns are drawn as dots for that build only. The
+build names them in a warning and asks again next time, and each request waits at most
+`OSM_REQUEST_TIMEOUT_S` (30 s). A long unbroken
 run of misses stops the build, because it means the lookup is broken
 (`OSM_MAX_CONSECUTIVE_FALLBACKS`).
 
