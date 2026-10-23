@@ -191,15 +191,55 @@ def test_a_municipality_is_accepted_by_place_rank_when_untyped(monkeypatch):
     assert _fetch().symmetric_difference(BOUNDARY).area < 1e-9
 
 
-def test_an_overpass_outage_stops_the_run(monkeypatch):
-    # Swallowed, the outage became None, and the caller cached None as "this town
-    # has no boundary" -- a dot forever, from one bad minute of network
+def test_an_overpass_outage_is_reported_as_the_fallback_being_unavailable(monkeypatch):
+    # Not None: the caller would cache None as "this town has no boundary", a dot
+    # forever from one bad minute of network. A distinct error lets it tell apart.
     def boom(*args, **kwargs):
         raise requests.ConnectionError("Connection refused")
 
     monkeypatch.setattr(geocoding.ox, "features_from_point", boom)
-    with pytest.raises(RuntimeError, match="Overpass request for Nowhere, Missouri failed"):
+    with pytest.raises(geocoding.FallbackUnavailable, match="Overpass request for Nowhere"):
         _fetch()
+
+
+def test_a_nominatim_outage_is_not_mistaken_for_a_fallback_outage(monkeypatch):
+    def boom(*args, **kwargs):
+        raise requests.ConnectionError("Connection refused")
+
+    monkeypatch.setattr(geocoding.ox, "geocode_to_gdf", boom)
+    with pytest.raises(RuntimeError) as err:
+        _fetch()
+    assert not isinstance(err.value, geocoding.FallbackUnavailable)
+
+
+def test_overpass_requests_are_capped(monkeypatch):
+    # The library default waits 180s per request; an overloaded public Overpass
+    # then held one town for up to 18 minutes
+    from maybemap.config import OSM_REQUEST_TIMEOUT_S
+
+    assert geocoding.ox.settings.requests_timeout == OSM_REQUEST_TIMEOUT_S <= 30
+
+
+def test_an_unavailable_fallback_draws_a_dot_for_this_build_only(
+    monkeypatch, spreadsheet, seeded_cache, capsys
+):
+    from maybemap.sources import cities
+
+    def down(city, *a, **k):
+        raise geocoding.FallbackUnavailable(f"Overpass request for {city} failed")
+
+    cached = []
+    monkeypatch.setattr(cities, "OSM_MAX_CONSECUTIVE_FALLBACKS", 2)
+    monkeypatch.setattr(cities, "get_cached_osm_polygon", lambda *a, **k: geocoding.NOT_CACHED)
+    monkeypatch.setattr(cities, "fetch_osm_city_polygon", down)
+    monkeypatch.setattr(cities, "cache_osm_polygon", lambda *a: cached.append(a))
+    points, _ = cities.load_city_points(spreadsheet)
+
+    # Every town's fallback is down, yet the build goes on: these are not misses
+    boundaries = cities.load_city_boundaries(points)
+    assert boundaries.geometry.isna().all()
+    assert cached == []
+    assert "Kansas City" in capsys.readouterr().out
 
 
 def test_the_county_disambiguates_a_shared_name(monkeypatch):

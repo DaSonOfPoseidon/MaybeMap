@@ -78,6 +78,9 @@ MAX_CANDIDATE_AREA_M2 = 3_000_000_000
 # A failed Overpass request must never be mistaken for "this town has no boundary"
 OSM_FETCH_RETRIES = 3  # attempts per query before the run gives up
 OSM_FETCH_RETRY_PAUSE_S = 5.0  # base pause between attempts, scaled by attempt number
+# Per-request wait for Nominatim and Overpass. The library default is 180s, which
+# with retries let one town hold a build for 18 minutes while Overpass was overloaded.
+OSM_REQUEST_TIMEOUT_S = 30
 # Genuine coverage gaps are scattered; an unbroken run of them means the lookup is
 # broken, not that Missouri stopped having city limits.
 OSM_MAX_CONSECUTIVE_FALLBACKS = 8
