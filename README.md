@@ -1,219 +1,111 @@
-# MaybeMap - Professional Regional Mapping Tool
+# MaybeMap
 
-A Python application that creates professional-quality regional maps from Excel data for business presentations and internal reference.
+Builds **one interactive HTML map** of the service territory. Zones, city limits, every
+serviced town, and dispatch drive times are layers on the same map, and each one
+switches on and off independently, so you can stack whatever you need at the time.
 
-## Overview
-
-MaybeMap transforms Excel spreadsheets containing city and group information into polished, executive-ready maps with:
-- **Geographic-aware smart labeling** (labels placed toward empty space)
-- **Numbered dense area system** (organized spiral placement for clustered cities)
-- **Professional cartographic labeling** (zero overlapping text guaranteed)
-- **Hierarchical typography** (major cities emphasized)
-- **Interactive HTML maps** for digital exploration
-- **High-resolution PNG exports** for print/presentations
-
-## Quick Start
-
-### Prerequisites
-- Python 3.8 or higher
-- [Geoapify API key](https://www.geoapify.com/) (free tier available)
-
-### Installation
-1. Clone or download this project
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Create a `.env` file with your API key:
-   ```
-   GEOAPIFY_KEY=your_api_key_here
-   ```
-4. Prepare your Excel file (see Data Format below)
-
-### Running
 ```bash
-python maybeMap.py
+uv sync --python 3.14
+uv run python buildMap.py        # -> output/maybe_map.html
 ```
 
-**First run takes 10-15 minutes** for geocoding and boundary fetching. Subsequent runs are much faster due to caching.
+The output is a single self-contained file. Open it in a browser, or send it to someone.
+It needs internet access only for Leaflet and the basemap tiles. Drive times are baked in.
 
-## Data Format
-
-Your Excel file (`Socket-Regions.xlsx`) must contain these columns:
-- **City**: City name (e.g., "Saint Louis")
-- **State**: Two-letter state code (e.g., "MO") 
-- **Group**: Regional grouping (e.g., "Group 1: Metro East")
-
-Example:
-```
-City          | State | Group
-Saint Louis   | MO    | Group 1: Metro East
-Chicago       | IL    | Group 2: Illinois
-Springfield   | MO    | Group 1: Metro East
-```
-
-## Output Files
-
-### 🖼️ Static Map (`grouped_regions_map.png`)
-- High-resolution PNG (220 DPI)
-- **Geographic-aware label placement** toward empty spaces
-- **Numbered dense areas** with spiral arrangement and reference legend
-- **Zero overlapping labels** guaranteed for professional appearance
-- **Manual positioning overrides** for specific cities
-- Perfect for presentations, reports, and printing
-
-### 🌐 Interactive Map (`grouped_regions_map.html`)
-- Click cities for detailed information popups
-- Toggle layers on/off
-- Fullscreen presentation mode
-- Professional legend and controls
-- Perfect for digital exploration and meetings
-
-### 📊 Data Export (`grouped_regions.geojson`)
-- Geographic data in standard GeoJSON format
-- Compatible with GIS software and web applications
-
-## Features
-
-### 🎯 Advanced Label Placement System
-- **Geographic-aware positioning** - Labels placed toward empty spaces using 8-directional density analysis
-- **Edge city intelligence** - Cities near map edges get inward-facing labels
-- **Interior city optimization** - Labels directed toward least dense areas
-- **Numbered dense areas** - Cities with 16+ neighbors get organized numbered placement
-- **Spiral arrangement** - Numbered labels arranged in professional spiral pattern
-- **Zero overlapping labels** - Guaranteed readable text placement
-
-### 🏗️ Professional Cartography
-- **Hierarchical typography** - Major cities in bold, larger fonts
-- **Adaptive collision detection** - Relaxed separation for very dense areas
-- **Manual positioning overrides** - Fine-tune specific city placements
-- **Clean leader lines** - Professional connecting lines with optimal routing
-- **Density-first processing** - Dense area cities get priority placement
-
-### 🏙️ City Classification System
-- **Primary Cities**: Major metropolitan areas (largest markers/fonts)
-- **Secondary Cities**: State capitals and significant cities  
-- **Tertiary Cities**: All other cities
-- **Dense Area Cities**: Automatically numbered when 16+ neighbors detected
-
-### 🔄 Smart Data Processing
-- **Automatic geocoding** via Geoapify API
-- **OSM boundary fetching** for accurate city shapes
-- **Intelligent caching** for fast subsequent runs
-- **Fallback systems** for missing data
-- **Density-based sorting** for optimal placement order
-
-## Configuration
-
-Key settings in `maybeMap.py`:
-
-```python
-# Map styling
-BASEMAP = "voyager"              # "voyager", "dark", or "positron"
-EXPORT_INTERACTIVE_HTML = True
-
-# Professional typography
-LABEL_FONTSIZE_PRIMARY = 11      # Major cities
-LABEL_FONTSIZE_SECONDARY = 9     # Medium cities  
-LABEL_FONTSIZE_TERTIARY = 8      # Small cities
-
-# Advanced label placement
-LABEL_MIN_SEPARATION_M = 8000    # Base minimum separation (8km)
-MAX_LABEL_DISTANCE_M = 80000     # Maximum leader line length (80km)
-dense_area_threshold = 16        # Cities with 16+ neighbors get numbered
-
-# Spiral placement for dense areas
-angle_step = 0.5                 # Radians between spiral positions
-radius_step = 8000               # 8km radius increase per spiral turn
-```
-
-## File Structure
+## Folders
 
 ```
-MaybeMap-1/
-├── maybeMap.py              # Main application
-├── requirements.txt         # Python dependencies
-├── Socket-Regions.xlsx      # Your input data
-├── .env                     # API keys (create this)
-├── README.md               # This file
-├── CLAUDE.md               # Developer guidance
-├── city_geocodes_cache.json     # Geocoding cache (auto-generated)
-├── osm_boundaries_cache.json    # Boundary cache (auto-generated)
-├── grouped_regions_map.png      # Output: Static map
-├── grouped_regions_map.html     # Output: Interactive map
-└── grouped_regions.geojson      # Output: Geographic data
+buildMap.py              # entrypoint
+maybemap/                # the build
+  config.py              # every path and setting
+  sources/               # readers: KMZ zones, city export, dispatch roster
+  geocoding.py           # Geoapify + OSM boundary lookups (cached)
+  routing.py             # OSRM drive-time matrix (cached)
+  payload.py             # everything the page draws, as one JSON document
+  page.py                # inlines payload + web/ into the single HTML file
+  web/                   # the page: template.html, app.css, app.js (Leaflet 1.9.4)
+tests/
+data/     (not tracked)  # inputs you maintain
+cache/    (not tracked)  # lookups the build can always redo
+output/   (not tracked)  # maybe_map.html
 ```
 
-## CLI Progress Output
+`data/`, `cache/` and `output/` are gitignored. The data is business data, and the other
+two are rebuilt by the build. Deleting `cache/` is safe; the next build just takes longer.
 
-The application provides real-time progress feedback:
+## Inputs (`data/`)
 
+| File | What it is |
+|---|---|
+| `serviced_cities.csv` | The MBS export: `City, County, State, Region, Customers, Active Addresses, Tasks 6 Mo, Service Mix, Residential Customers, Business Customers`. An `.xlsx` works too; point `CITY_DATA_PATH` at it. |
+| `MO_Zones.kmz` | The zone polygons, exported from ArcGIS. Colors come from the KML styles. |
+| `dispatch_techs.csv` | `Tech, Town, State`: one row per technician, at the town they work from. |
+| `dispatch_staging.csv` | `Type, Town, State`: one row per staging site. Each Type becomes its own switch. |
+
+Column names are matched case-insensitively. The roster CSVs are optional; without them
+the dispatch layer routes town to town with no techs, and there is no staging section.
+
+Geocoding a town the cache has not seen needs a [Geoapify](https://www.geoapify.com/) key
+in `.env` (see `.env.example`). Nothing else needs a key.
+
+## Layers
+
+Every section of the sidebar is a layer with its own switch. The **Territory**,
+**Coverage** and **Dispatch** buttons in the top bar are shortcuts that flip those
+switches. They are not separate views.
+
+- **Zones**: the KMZ zones in their own colors. Each zone has its own switch, and there
+  are switches for labels and fill strength.
+- **City outlines**: real OSM city limits for every town that has a region. They are
+  shaded in their zone's color while Zones is on, and in their region's color otherwise.
+- **City dots**: a dot for every serviced town, in its region's color, sized by customer
+  count. Towns with no region are gray.
+- **Town filters**: customer count, service type and region. These apply to both dots
+  and outlines.
+- **Dispatch**: pins for every town that has a region, plus every tech's home town. Tech
+  pins are orange. Route lines can show each town's closest towns, its nearest tech, or
+  the selected town's three closest, all labeled with road miles and drive time.
+- **Staging sites**: badges on the staging towns, one switch per type.
+- **Basemap**: Light gray, Satellite or Streets, with optional place names.
+
+Click any dot, outline or pin to open its card. The card shows customer detail, region and
+zone, the 3 closest dispatch towns and 2 nearest techs by drive time, Google Maps links,
+and **notes**. Notes are saved in that browser only; use **Export notes CSV** to back them
+up or share them, and **Import** to load them elsewhere. Imports also accept the old
+dispatch map's `Market, Notes` export.
+
+Layer settings are remembered per browser, so the map reopens the way it was left.
+
+## Which towns are in the dispatch set
+
+A town is in the dispatch set if it has a Region in the export, or if it is a tech's
+home town. Tech towns are always added, so a technician is never unroutable. The build
+prints which tech towns had no region. To add any other town to dispatch, give it a
+region in the export.
+
+## Drive times
+
+Drive times come from OSRM's public `table` service, using the fastest route between town
+centers with no live traffic. They are fetched **at build time** and cached per pair in
+`cache/osrm_matrix.json`. A rebuild with the same towns makes no requests. A new town
+only needs its own row and column fetched, sent in blocks of up to 50 places
+(`OSRM_CHUNK`), so with around 90 towns that comes to about three requests. If OSRM cannot answer, the build stops
+rather than write a map with missing drive times.
+
+The route lines are straight connectors. They are not road shapes.
+
+## City boundaries
+
+Outlines come from Nominatim (with the county, to separate cities from same-named
+counties), with an Overpass fallback. They are cached in `cache/osm_boundaries.json`.
+Missing a few boundaries is normal, and those towns just keep their dot. A long unbroken
+run of misses stops the build, because it means the lookup is broken
+(`OSM_MAX_CONSECUTIVE_FALLBACKS`).
+
+## Quality checks
+
+```bash
+uv run ruff check . && uv run black --check . && uv run pytest
 ```
-Starting geocoding process for 61 unique cities...
-   Found coordinates: 38.6270, -90.1994
-...
-Geocoding complete! Processed 61 cities.
 
-Starting OSM boundary fetching for 61 cities...
-   Found OSM boundary polygon (area: 162.45 km²)
-...
-OSM boundary fetching complete! Processed 61 cities.
-
-Generating professional cartographic map...
-Applying professional cartographic labeling system...
-   Map analysis: 58 cities analyzed
-      East Alton: Found preferred position at 8000m after 1 attempts
-   Numbered Cahokia Heights: #1 pin(-10040052, 4660327) -> label(-10018112, 4672313)
-   Placing Columbia: pin(-10040995, 4642170) -> label(-10065995, 4617170)
-   Professional labeling complete - no overlapping labels!
-```
-
-## Troubleshooting
-
-### Common Issues
-
-**"Missing GEOAPIFY_KEY" error**
-- Create a `.env` file with your API key
-- Get a free key at [geoapify.com](https://www.geoapify.com/)
-
-**Slow first run**
-- Normal behavior - building geocoding and boundary caches
-- Subsequent runs will be much faster
-- You can monitor progress in the CLI output
-
-**Cities not found**
-- Check city name spelling in Excel file
-- Verify state abbreviations are correct (two letters)
-- Some small towns may not be in the geocoding database
-
-**Empty or missing boundaries**
-- Script automatically falls back to circular buffers around points
-- This is normal for smaller cities without detailed OSM data
-
-## Use Cases
-
-### Business Applications
-- **Regional sales territories** mapping
-- **Market analysis** visualization  
-- **Operations planning** reference maps
-- **Executive presentations** with professional appearance
-- **Internal documentation** with interactive exploration
-
-### Technical Applications
-- **Geographic data visualization** from spreadsheets
-- **Quick prototyping** of regional analysis
-- **Data validation** through visual inspection
-
-## API Dependencies
-
-- **Geoapify**: City geocoding (latitude/longitude lookup)
-- **OpenStreetMap**: City boundary polygons via OSMnx
-- **CartoDB**: Base map tiles for visualization
-
-## Development
-
-See `CLAUDE.md` for detailed development guidance and architecture notes.
-
-## License
-
-Internal business tool - modify as needed for your organization's requirements.
+The tests stub every network call. Business data never enters the tests: the KMZ tests use a generated KMZ in the same ArcGIS format.
