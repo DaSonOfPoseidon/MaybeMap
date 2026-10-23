@@ -1,16 +1,13 @@
 [project]
 name = "maybemap"
 version = "0.2.0"
-description = "Regional mapping tool: builds PNG and interactive HTML maps from CSV/Excel city lists or KMZ zone files"
+description = "Builds one interactive HTML map of service zones, towns and dispatch drive times"
 requires-python = ">=3.14"
 dependencies = [
     "pandas>=1.3.0",
     "geopandas>=0.10.0",
     "requests>=2.28.0",
-    "matplotlib>=3.5.0",
-    "contextily>=1.2.0",
     "osmnx>=1.2.0",
-    "folium>=0.12.0",
     "shapely>=1.8.0",
     "python-dotenv>=0.19.0",
     "openpyxl>=3.0.9",

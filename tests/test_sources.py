@@ -89,34 +89,3 @@ def test_customers_is_optional(tmp_path):
 
     without = _frame(tmp_path, [("Columbia", "MO", "Central")], ["City", "State", "Region"])
     assert without["Customers"].isna().all()
-
-
-def test_unassigned_towns_are_mapped_but_never_looked_up(
-    city_csv, seeded_cache, stub_city_boundaries
-):
-    data = cities.load_city_regions(city_csv)
-    seen = stub_city_boundaries
-
-    # Springfield has no region: it is drawn, but it costs no Overpass round trip
-    assert "Springfield" not in seen
-    assert "Springfield" in set(data.points["City"])
-    assert data.draw_city_dots
-    assert data.colors[UNASSIGNED_GROUP_LABEL] == "#9e9e9e"
-
-
-def test_unassigned_towns_are_drawn_but_not_named(city_csv, seeded_cache, stub_city_boundaries):
-    # Labeling every town in the export would bury the map in several hundred names
-    points = cities.load_city_regions(city_csv).points
-    labeled = dict(zip(points["City"], points["Labeled"], strict=True))
-    assert labeled["Springfield"] is False or not labeled["Springfield"]
-    assert labeled["Columbia"]
-
-
-def test_the_unassigned_group_gets_no_enclosing_circle(
-    city_csv, seeded_cache, stub_city_boundaries
-):
-    data = cities.load_city_regions(city_csv)
-
-    # Its towns are scattered; a circle around them would cover the whole map
-    assert UNASSIGNED_GROUP_LABEL not in set(data.circles["Group"])
-    assert not data.circles.empty

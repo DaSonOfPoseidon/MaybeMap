@@ -1,32 +1,16 @@
-# Builds region polygons from a spreadsheet of City / State / Region rows by
-# geocoding each city and fetching its OSM municipal boundary. Reads either a CSV
-# or an .xlsx -- the column names and the geometry work are the same either way.
+# Reads the serviced-city export (City / State / Region rows, CSV or .xlsx),
+# geocodes each town, and fetches OSM municipal boundaries for the ones that
+# belong to a region.
 
 import re
 from pathlib import Path
 
 import geopandas as gpd
-import matplotlib
-import matplotlib.colors as mcolors
 import pandas as pd
-from shapely.geometry import Point
-from shapely.ops import unary_union
 
 from maybemap.config import (
-    AREA_STYLE,
-    BASEMAP_ZOOM,
-    CIRCLE_PAD_M,
     CITY_DATA_PATH,
-    CITY_EDGE_ALPHA,
-    CITY_EDGE_WIDTH,
-    CITY_FILL_ALPHA,
-    MERGE_GAP_M,
-    MIN_PART_M2,
     OSM_MAX_CONSECUTIVE_FALLBACKS,
-    POINT_FALLBACK_BUFFER_M,
-    REGION_MAP_CITY_FILTERS,
-    SIMPLIFY_M,
-    UNASSIGNED_GROUP_COLOR,
     UNASSIGNED_GROUP_LABEL,
 )
 from maybemap.geocoding import (
@@ -35,8 +19,6 @@ from maybemap.geocoding import (
     geocode_city_state,
     get_cached_osm_polygon,
 )
-from maybemap.labeling import minimum_enclosing_circle
-from maybemap.sources import MapData
 from maybemap.states import state_abbrev
 
 # Optional per-town detail, keyed by the lower-cased column header the export uses.
@@ -59,19 +41,6 @@ def _group_num(s: str) -> int:
         return 10**9 + 1
     m = re.search(r"Group\s*(\d+)", s or "", re.IGNORECASE)
     return int(m.group(1)) if m else 10**9
-
-
-def _drop_small_parts(geom, min_area):
-    if geom is None or geom.is_empty:
-        return None
-    if geom.geom_type == "Polygon":
-        return geom if geom.area >= min_area else None
-    if geom.geom_type == "MultiPolygon":
-        parts = [p for p in geom.geoms if p.area >= min_area]
-        if not parts:
-            return None
-        return unary_union(parts)
-    return geom
 
 
 def _title_case(series: pd.Series) -> pd.Series:
@@ -123,8 +92,7 @@ def _read_frame(path: Path, *, unassigned_label: str | None) -> pd.DataFrame:
     df["County"] = df["County"].fillna("").astype(str).str.strip() if county_col else ""
 
     # Both formats normalize to the same shape: title-case names and two-letter
-    # states. classify_city_importance matches on the abbreviation, so the xlsx's
-    # spelled-out "Missouri" never matched its own capital before this.
+    # states, so a town reads the same whichever export it came from.
     df["City"] = _title_case(df["City"])
     df["County"] = _title_case(df["County"])
     df["State"] = df["State"].map(state_abbrev)
@@ -163,8 +131,8 @@ def load_city_points(
     *,
     unassigned_label: str | None = UNASSIGNED_GROUP_LABEL,
 ) -> tuple[gpd.GeoDataFrame, list[str]]:
-    # Geocodes the spreadsheet into city points. Shared by the region map and the
-    # city overlay on zone maps -- neither needs OSM boundaries for this.
+    # Geocodes the spreadsheet into city points, EPSG:3857. A town the geocoder
+    # cannot place is dropped with the rest of its rows.
     path = Path(path)
     df = _read_frame(path, unassigned_label=unassigned_label)
     ordered_groups = sorted(df["Group"].unique().tolist(), key=_group_num)
@@ -199,10 +167,9 @@ def load_city_points(
     return gdf_points, ordered_groups
 
 
-def load_city_boundaries(gdf_points, *, fallback_buffer_m: float | None = None):
+def load_city_boundaries(gdf_points):
     # One row per unique city: City, State, Group, geometry in EPSG:3857. Geometry is
-    # None where OSM has no boundary, unless fallback_buffer_m asks for a circle around
-    # the point instead -- the Excel map wants that, the zone overlay wants a dot.
+    # None where OSM has no boundary, and the map keeps that town as a dot.
     pt_lookup = {
         (r.City, r.State): r.geometry
         for r in gdf_points[["City", "State", "geometry"]]
@@ -241,115 +208,20 @@ def load_city_boundaries(gdf_points, *, fallback_buffer_m: float | None = None):
                 raise RuntimeError(
                     f"{consecutive_fallbacks} cities in a row returned no OSM boundary, "
                     f"the latest being {city}, {state}. That points at the lookup being "
-                    f"broken rather than the data being missing, so stopping instead of "
-                    f"drawing a map of {POINT_FALLBACK_BUFFER_M / 1000:.0f}km circles. "
-                    f"Check the Overpass API, then rerun -- cached boundaries are kept."
+                    f"broken rather than the data being missing, so stopping rather than "
+                    f"drawing a map of dots. Check Nominatim and the Overpass API, then "
+                    f"rerun -- cached boundaries are kept."
                 )
-            if fallback_buffer_m is None:
-                geom_3857 = None
-            else:
-                print(
-                    f"   No OSM boundary found, using "
-                    f"{fallback_buffer_m / 1000:.1f}km buffer around point"
-                )
-                geom_3857 = pt_lookup[(city, state)].buffer(fallback_buffer_m)
+            geom_3857 = None
         else:
             consecutive_fallbacks = 0
             geom_3857 = gpd.GeoSeries([geom_ll], crs=4326).to_crs(3857).iloc[0]
 
         records.append({"City": city, "State": state, "Group": group, "geometry": geom_3857})
 
-    # Say plainly how much of the map is real geometry rather than a stand-in circle
-    stand_in = f"{fallback_buffer_m / 1000:.0f}km circles" if fallback_buffer_m else "no boundary"
     print(
         f"OSM boundary fetching complete! Processed {total_cities} cities, "
         f"{total_cities - total_fallbacks} with real boundaries and "
-        f"{total_fallbacks} using {stand_in}.\n"
+        f"{total_fallbacks} kept as dots.\n"
     )
     return gpd.GeoDataFrame(records, geometry="geometry", crs=3857)
-
-
-def load_city_regions(
-    path: Path | str = CITY_DATA_PATH,
-    *,
-    title: str = "Mapped Regions by Group",
-    output_stem: str = "grouped_regions",
-) -> MapData:
-    path = Path(path)
-    gdf_points, ordered_groups = load_city_points(path)
-
-    # Only towns that belong to a real region get an OSM boundary. The catch-all
-    # is most of the export and every one of those lookups is an Overpass round
-    # trip, so those towns are drawn as dots instead.
-    regioned = gdf_points[gdf_points["Group"] != UNASSIGNED_GROUP_LABEL].copy()
-    gdf_city_polys = load_city_boundaries(regioned, fallback_buffer_m=POINT_FALLBACK_BUFFER_M)
-
-    gdf_city_polys["Group"] = pd.Categorical(
-        gdf_city_polys["Group"], categories=ordered_groups, ordered=True
-    )
-
-    gdf_polys = gdf_city_polys.dissolve(by="Group", as_index=False, aggfunc="first")
-    if AREA_STYLE == "union_smooth":
-        geoms = gdf_polys.geometry.buffer(MERGE_GAP_M).buffer(-MERGE_GAP_M)
-        geoms = geoms.simplify(SIMPLIFY_M, preserve_topology=True)
-        geoms = geoms.apply(lambda g: _drop_small_parts(g, MIN_PART_M2))
-        gdf_polys["geometry"] = geoms
-    elif AREA_STYLE == "convex_hull":
-        gdf_polys["geometry"] = gdf_polys.geometry.convex_hull
-    gdf_polys = gdf_polys[gdf_polys.geometry.notnull()].copy()
-    gdf_polys["Group"] = pd.Categorical(gdf_polys["Group"], categories=ordered_groups, ordered=True)
-
-    # Group visualization
-    print("Calculating group boundaries and minimum enclosing circles...")
-    circle_rows = []
-    for grp, sub in gdf_points.groupby("Group", observed=False):
-        if grp == UNASSIGNED_GROUP_LABEL:
-            # Its towns are scattered across five states; the enclosing circle
-            # would cover everything else on the map
-            continue
-        pts = [(geom.x, geom.y) for geom in sub.geometry]
-        mec = minimum_enclosing_circle(pts)
-        if mec is None:
-            continue
-        cx0, cy0, r = mec
-        r = r + CIRCLE_PAD_M
-        circle_rows.append(
-            {"Group": grp, "geometry": Point(cx0, cy0).buffer(r, quad_segs=256), "r": r}
-        )
-
-    gdf_circles = gpd.GeoDataFrame(circle_rows, geometry="geometry", crs=3857)
-    gdf_circles["Group"] = pd.Categorical(
-        gdf_circles["Group"], categories=ordered_groups, ordered=True
-    )
-
-    cmap = matplotlib.colormaps["tab20"]
-    colors = {grp: mcolors.to_hex(cmap(i % cmap.N)) for i, grp in enumerate(ordered_groups)}
-    if UNASSIGNED_GROUP_LABEL in colors:
-        colors[UNASSIGNED_GROUP_LABEL] = UNASSIGNED_GROUP_COLOR
-
-    regions = gdf_polys.rename(columns={"Group": "Label"})[["Label", "geometry"]].copy()
-    regions["Color"] = regions["Label"].map(colors)
-    gdf_points["Color"] = gdf_points["Group"].map(colors)
-    # The unassigned towns are context, not subject matter: they get a dot but no
-    # label, so the map does not try to name several hundred of them at once.
-    gdf_points["Labeled"] = gdf_points["Group"] != UNASSIGNED_GROUP_LABEL
-
-    return MapData(
-        regions=gpd.GeoDataFrame(regions, geometry="geometry", crs=3857),
-        colors=colors,
-        order=ordered_groups,
-        title=title,
-        output_stem=output_stem,
-        points=gdf_points,
-        detail_polys=gdf_city_polys,
-        circles=gdf_circles,
-        basemap_zoom=BASEMAP_ZOOM,
-        draw_regions=False,
-        label_regions=False,
-        # The towns with no region have no boundary of their own to be seen by
-        draw_city_dots=True,
-        city_filters=REGION_MAP_CITY_FILTERS,
-        fill_alpha=CITY_FILL_ALPHA,
-        edge_alpha=CITY_EDGE_ALPHA,
-        edge_width=CITY_EDGE_WIDTH,
-    )

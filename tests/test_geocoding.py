@@ -118,8 +118,9 @@ def test_a_long_run_of_misses_aborts(monkeypatch, spreadsheet, seeded_cache):
     monkeypatch.setattr(cities, "cache_osm_polygon", lambda *a, **k: None)
     monkeypatch.setattr(cities, "get_cached_osm_polygon", lambda *a, **k: None)
 
+    points, _ = cities.load_city_points(spreadsheet)
     with pytest.raises(RuntimeError, match="3 cities in a row returned no OSM boundary"):
-        cities.load_city_regions(spreadsheet)
+        cities.load_city_boundaries(points)
 
 
 def test_scattered_misses_are_tolerated(monkeypatch, spreadsheet, seeded_cache):
@@ -137,9 +138,10 @@ def test_scattered_misses_are_tolerated(monkeypatch, spreadsheet, seeded_cache):
     monkeypatch.setattr(cities, "cache_osm_polygon", lambda *a, **k: None)
     monkeypatch.setattr(cities, "get_cached_osm_polygon", lambda *a, **k: None)
 
-    data = cities.load_city_regions(spreadsheet)
+    points, _ = cities.load_city_points(spreadsheet)
+    boundaries = cities.load_city_boundaries(points)
     assert len(seen) == 4  # every city processed, nothing aborted
-    assert not data.regions.empty
+    assert boundaries.geometry.notna().sum() == 2
 
 
 def test_nominatim_answers_first_and_overpass_is_never_called(monkeypatch):
@@ -239,10 +241,9 @@ def test_a_wrong_county_falls_back_to_the_plain_query(monkeypatch):
     assert asked == ["Nowhere, Nonesuch County, Missouri, USA", "Nowhere, Missouri, USA"]
 
 
-def test_a_missing_boundary_is_left_empty_or_buffered(monkeypatch, spreadsheet, seeded_cache):
-    # The Excel map wants a stand-in circle; the zone overlay wants a dot, so it asks
-    # for no buffer and gets a null geometry it can filter on
-    from maybemap.config import POINT_FALLBACK_BUFFER_M
+def test_a_missing_boundary_is_left_empty(monkeypatch, spreadsheet, seeded_cache):
+    # No stand-in circle: the map keeps that town as a dot, so a null geometry is
+    # the honest answer
     from maybemap.sources import cities
 
     monkeypatch.setattr(cities, "get_cached_osm_polygon", lambda *a, **k: None)
@@ -252,11 +253,6 @@ def test_a_missing_boundary_is_left_empty_or_buffered(monkeypatch, spreadsheet, 
     points, _ = cities.load_city_points(spreadsheet)
 
     assert cities.load_city_boundaries(points).geometry.isna().all()
-
-    buffered = cities.load_city_boundaries(points, fallback_buffer_m=POINT_FALLBACK_BUFFER_M)
-    assert buffered.geometry.notna().all()
-    # A 5km circle, give or take the buffer's polygonal approximation
-    assert buffered.geometry.area.min() > 3.14 * POINT_FALLBACK_BUFFER_M**2 * 0.99
 
 
 def test_a_geocode_landing_in_another_state_is_thrown_away(monkeypatch):

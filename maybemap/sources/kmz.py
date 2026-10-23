@@ -12,16 +12,8 @@ from pathlib import Path
 import geopandas as gpd
 from shapely.geometry import MultiPolygon, Polygon
 
-from maybemap.config import (
-    KMZ_PATH,
-    ZONE_BASEMAP_ZOOM,
-    ZONE_COLOR_OVERRIDES,
-    ZONE_EDGE_ALPHA,
-    ZONE_EDGE_WIDTH,
-    ZONE_FILL_ALPHA,
-)
-from maybemap.sources import MapData
-from maybemap.styling import kml_color_to_hex
+from maybemap.colors import kml_color_to_hex
+from maybemap.config import KMZ_PATH, ZONE_COLOR_OVERRIDES
 
 KML_NS = "http://www.opengis.net/kml/2.2"
 
@@ -107,20 +99,15 @@ def _parse_polygons(placemark) -> Polygon | MultiPolygon | None:
     return polygons[0] if len(polygons) == 1 else MultiPolygon(polygons)
 
 
-def load_kmz_zones(
-    path: Path | str = KMZ_PATH,
-    *,
-    title: str = "Missouri Zones",
-    output_stem: str | None = None,
-    name_fields=DEFAULT_NAME_FIELDS,
-) -> MapData:
+def load_kmz_zones(path: Path | str = KMZ_PATH, *, name_fields=DEFAULT_NAME_FIELDS):
+    # One row per zone in authored order: Label, Color, geometry in EPSG:4326
     from xml.etree import ElementTree
 
     path = Path(path)
     root = ElementTree.fromstring(_read_kml_bytes(path))
     styles = _parse_styles(root)
 
-    records, colors, order = [], {}, []
+    records = []
     for index, placemark in enumerate(root.iter(_ns("Placemark"))):
         geometry = _parse_polygons(placemark)
         if geometry is None:
@@ -136,27 +123,11 @@ def load_kmz_zones(
         style_id = _text(placemark, "styleUrl").lstrip("#")
         style_color = styles.get(style_id, ("#808080", 1.0))[0]
         color = ZONE_COLOR_OVERRIDES.get(label, style_color)
-
         records.append({"Label": label, "Color": color, "geometry": geometry})
-        colors[label] = color
-        order.append(label)
 
     if not records:
         raise ValueError(f"No polygon placemarks found in {path}")
 
-    regions = gpd.GeoDataFrame(records, geometry="geometry", crs=4326).to_crs(3857)
-
-    print(f"Loaded {len(regions)} zones from {path.name}: {', '.join(order)}")
-
-    return MapData(
-        regions=regions,
-        colors=colors,
-        order=order,
-        title=title,
-        output_stem=output_stem or path.stem.lower(),
-        basemap_zoom=ZONE_BASEMAP_ZOOM,
-        label_regions=True,
-        fill_alpha=ZONE_FILL_ALPHA,
-        edge_alpha=ZONE_EDGE_ALPHA,
-        edge_width=ZONE_EDGE_WIDTH,
-    )
+    zones = gpd.GeoDataFrame(records, geometry="geometry", crs=4326)
+    print(f"Loaded {len(zones)} zones from {path.name}: {', '.join(zones['Label'])}")
+    return zones

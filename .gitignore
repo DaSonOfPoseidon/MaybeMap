@@ -1,21 +1,10 @@
 .env
-*.xlsx
-*.csv
-*.kmz
-*.geojson
-*.json
-*.png
-*.html
 
-# Generated maps. These are outputs, and a keyed basemap writes CARTO_API_KEY into
-# the HTML in plaintext -- committing one would publish the key.
-grouped_regions_map.*
-mo_zones_map.*
-tasks_map.*
-
-# Caches
-*.json
+# Business data, lookup caches and the built map stay local
+data/
 cache/
+output/
+
 __pycache__/
 .pytest_cache/
 .ruff_cache/

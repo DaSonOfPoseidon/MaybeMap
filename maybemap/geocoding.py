@@ -1,5 +1,5 @@
 # Geoapify geocoding and OSM boundary lookup, with on-disk caches.
-# Only the Excel source needs any of this; the KMZ source ships finished polygons.
+# The KMZ source ships finished polygons and needs none of this.
 
 import json
 import os
@@ -16,6 +16,7 @@ from osmnx._errors import InsufficientResponseError, ResponseStatusCodeError
 from shapely import wkt
 
 from maybemap.config import (
+    CACHE_DIR,
     MAX_CANDIDATE_AREA_M2,
     OSM_FETCH_RETRIES,
     OSM_FETCH_RETRY_PAUSE_S,
@@ -28,18 +29,18 @@ from maybemap.states import state_abbrev, state_full
 load_dotenv(PROJECT_ROOT / ".env")
 
 ox.settings.use_cache = True
+ox.settings.cache_folder = str(CACHE_DIR / "osmnx")
 ox.settings.log_console = False
 
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "MaybeMap/1.0"})
 
-GEOCODE_CACHE_PATH = PROJECT_ROOT / "city_geocodes_cache.json"
-BOUNDARY_CACHE_PATH = PROJECT_ROOT / "osm_boundaries_cache.json"
-# Street addresses are their own keyspace -- the city cache is keyed "City, State"
-ADDRESS_CACHE_PATH = PROJECT_ROOT / "address_geocodes_cache.json"
+GEOCODE_CACHE_PATH = CACHE_DIR / "city_geocodes.json"
+BOUNDARY_CACHE_PATH = CACHE_DIR / "osm_boundaries.json"
 
 
 def _load_cache(path) -> dict:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.touch(exist_ok=True)
     try:
         return json.loads(path.read_text() or "{}")
@@ -49,7 +50,6 @@ def _load_cache(path) -> dict:
 
 GEOCODE_CACHE: dict[str, dict[str, float] | None] = _load_cache(GEOCODE_CACHE_PATH)
 BOUNDARY_WKT: dict[str, str | None] = _load_cache(BOUNDARY_CACHE_PATH)
-ADDRESS_CACHE: dict[str, dict[str, float] | None] = _load_cache(ADDRESS_CACHE_PATH)
 
 
 def _save_geocode_cache():
@@ -58,10 +58,6 @@ def _save_geocode_cache():
 
 def _save_boundary_cache():
     BOUNDARY_CACHE_PATH.write_text(json.dumps(BOUNDARY_WKT, indent=2))
-
-
-def _save_address_cache():
-    ADDRESS_CACHE_PATH.write_text(json.dumps(ADDRESS_CACHE, indent=2))
 
 
 def _require_api_key() -> str:
@@ -133,31 +129,6 @@ def geocode_city_state(city: str, state: str, progress_info: str = ""):
         print(f"   Found coordinates: {res['lat']:.4f}, {res['lon']:.4f}")
     else:
         print(f"   Geocoding failed for {city}, {state}")
-
-    return res
-
-
-def geocode_address(query: str, state: str, progress_info: str = ""):
-    # A street address rather than a place name. Same rejection guard as the city
-    # lookup: a mistyped address matches something plausible in another state, and
-    # one such point drags the whole map's extent after it.
-    if query in ADDRESS_CACHE:
-        return ADDRESS_CACHE[query]
-
-    print(f"Geocoding address: {query} {progress_info}")
-    res = geoapify_forward(query)
-
-    if res and res.get("state_code") and res["state_code"] != state_abbrev(state):
-        print(f"   Rejected: {query} geocoded into {res['state_code']}")
-        res = None
-
-    ADDRESS_CACHE[query] = res
-    _save_address_cache()
-
-    if res:
-        print(f"   Found coordinates: {res['lat']:.4f}, {res['lon']:.4f}")
-    else:
-        print(f"   Address geocoding failed for {query}")
 
     return res
 

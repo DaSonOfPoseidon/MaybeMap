@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+<style>
+/*__CSS__*/
+</style>
+</head>
+<body>
+<div id="map" aria-label="Interactive service map"></div>
+
+<header class="topbar">
+  <div class="topbar-text"><h1 id="title"></h1><div class="sub" id="subtitle"></div></div>
+  <div class="presets" role="group" aria-label="Layer presets">
+    <button type="button" data-preset="territory">Territory</button>
+    <button type="button" data-preset="coverage">Coverage</button>
+    <button type="button" data-preset="dispatch">Dispatch</button>
+  </div>
+</header>
+
+<aside class="sidebar">
+  <div class="panel-head"><strong>Map layers</strong><p>Switch on whatever you need. Every layer stacks with the others.</p></div>
+  <div class="stats" id="stats"></div>
+
+  <div class="section" id="searchSection">
+    <div class="eyebrow">Find a town or tech</div>
+    <input id="townFilter" class="select" type="search" placeholder="Search towns, techs, regions or notes" autocomplete="off">
+    <div id="directory" class="directory"></div>
+  </div>
+
+  <div class="section selected-section" id="selectedSection" hidden>
+    <div class="selected-head">
+      <div class="eyebrow">Selected town</div>
+      <button type="button" class="linkbtn" id="clearSelection">Close</button>
+    </div>
+    <div id="selectedCard"></div>
+  </div>
+
+  <section class="section layer" data-layer="zones">
+    <label class="layer-head" for="layer-zones">
+      <span><span class="eyebrow">Layer</span><b>Zones</b><small id="zonesHint"></small></span>
+      <input type="checkbox" role="switch" id="layer-zones">
+    </label>
+    <div class="layer-body">
+      <div id="zoneToggles"></div>
+      <div class="label-controls"><button type="button" data-all="zones" data-on="1">Show all</button><button type="button" data-all="zones" data-on="0">Hide all</button></div>
+      <label class="label-toggle" for="zoneLabels"><span><b>Zone labels</b><small>Names at each zone's center</small></span><input type="checkbox" role="switch" id="zoneLabels"></label>
+      <div class="field-label">Fill strength</div>
+      <div class="seg seg3" id="zoneOpacity">
+        <button type="button" data-value="light">Light</button>
+        <button type="button" data-value="medium">Medium</button>
+        <button type="button" data-value="strong">Strong</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="section layer" data-layer="outlines">
+    <label class="layer-head" for="layer-outlines">
+      <span><span class="eyebrow">Layer</span><b>City outlines</b><small id="outlinesHint"></small></span>
+      <input type="checkbox" role="switch" id="layer-outlines">
+    </label>
+    <div class="layer-body">
+      <p class="route-note">Real OSM city limits for every town in a region. Shaded in its zone's color while Zones is on, otherwise in its region's color. Region and customer filters below apply here too.</p>
+    </div>
+  </section>
+
+  <section class="section layer" data-layer="dots">
+    <label class="layer-head" for="layer-dots">
+      <span><span class="eyebrow">Layer</span><b>City dots</b><small id="dotsHint"></small></span>
+      <input type="checkbox" role="switch" id="layer-dots">
+    </label>
+    <div class="layer-body">
+      <p class="route-note">One dot for every serviced town, in its region's color. Towns with no region are gray.</p>
+    </div>
+  </section>
+
+  <section class="section" id="filterSection">
+    <div class="eyebrow">Town filters · Dots and outlines</div>
+    <div class="field-label">Customers</div>
+    <div class="seg seg4" id="bucketButtons"></div>
+    <div class="field-label">Service type</div>
+    <div class="seg seg3" id="mixButtons"></div>
+    <div class="field-label">Regions</div>
+    <div id="regionToggles" class="region-list"></div>
+    <div class="label-controls"><button type="button" data-all="regions" data-on="1">Show all</button><button type="button" data-all="regions" data-on="0">Hide all</button></div>
+  </section>
+
+  <section class="section layer" data-layer="dispatch">
+    <label class="layer-head" for="layer-dispatch">
+      <span><span class="eyebrow">Layer</span><b>Dispatch</b><small id="dispatchHint"></small></span>
+      <input type="checkbox" role="switch" id="layer-dispatch">
+    </label>
+    <div class="layer-body">
+      <div class="field-label">Route lines</div>
+      <div class="seg" id="modeButtons">
+        <button type="button" data-mode="neighbors">Closest towns</button>
+        <button type="button" data-mode="staff">Nearest tech</button>
+        <button type="button" data-mode="selected">Selected town</button>
+        <button type="button" data-mode="none">No lines</button>
+      </div>
+      <div class="inline-field"><label for="count">Connections per town</label><select id="count" class="select"><option value="1">1 nearest</option><option value="2">2 nearest</option></select></div>
+      <label class="label-toggle" for="showTechNames"><span><b>Tech names</b><small id="techNamesHint"></small></span><input type="checkbox" role="switch" id="showTechNames"></label>
+      <label class="label-toggle" for="showTownNames"><span><b>Town names</b><small id="townNamesHint"></small></span><input type="checkbox" role="switch" id="showTownNames"></label>
+      <p class="route-note">Drive miles and times are OSRM's fastest route between town centers, without live traffic, worked out when the map was built. Lines are connectors, not road shapes.</p>
+    </div>
+  </section>
+
+  <section class="section" id="stagingSection">
+    <div class="eyebrow">Staging sites · Independent switches</div>
+    <div id="stagingToggles"></div>
+    <div class="staging-controls"><button type="button" data-all="staging" data-on="1">Show all staging</button><button type="button" data-all="staging" data-on="0">Hide all staging</button></div>
+  </section>
+
+  <section class="section" id="basemapSection">
+    <div class="eyebrow">Basemap</div>
+    <div class="seg seg3" id="basemapButtons">
+      <button type="button" data-value="gray">Light gray</button>
+      <button type="button" data-value="satellite">Satellite</button>
+      <button type="button" data-value="streets">Streets</button>
+    </div>
+    <label class="label-toggle" for="placeLabels"><span><b>Basemap place names</b><small id="placeLabelsHint"></small></span><input type="checkbox" role="switch" id="placeLabels"></label>
+  </section>
+
+  <section class="section" id="notesSection">
+    <div class="eyebrow">Town notes · Backup</div>
+    <p class="notehelp">Notes save in this browser only. Export a CSV to back them up or share them with the team, and import one to load them on another device.</p>
+    <div class="btnrow">
+      <button class="action" id="notesExport" type="button">Export notes CSV</button>
+      <button class="action secondary" id="notesImportBtn" type="button">Import notes CSV</button>
+    </div>
+    <input type="file" id="notesImportInput" accept=".csv,text/csv" hidden>
+    <p class="fineprint" id="builtAt"></p>
+  </section>
+</aside>
+
+<div class="legend" id="legend"></div>
+
+<script type="application/json" id="map-data">__PAYLOAD__</script>
+<script>
+/*__JS__*/
+</script>
+</body>
+</html>
