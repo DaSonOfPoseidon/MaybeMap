@@ -1,6 +1,9 @@
 # AGENTS.md
 
-Instructions for AI agents (Codex, Claude) working on this repository. Claude also reads `CLAUDE.md`.
+Instructions for AI agents (Codex, Claude) working on this repository. Codex reads this file directly.
+`CLAUDE.md` is kept local and untracked here, so a Claude Code session in a fresh clone needs a
+`CLAUDE.md` containing the line `@AGENTS.md` to load these rules. The pre-push review gate reads them
+from git either way.
 
 ## Code Review Rules
 
