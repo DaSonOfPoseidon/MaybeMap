@@ -12,8 +12,9 @@ OUTPUT_DIR = PROJECT_ROOT / "output"
 # Either a .csv or a .xlsx; the loader dispatches on the suffix
 CITY_DATA_PATH = DATA_DIR / "serviced_cities.csv"
 KMZ_PATH = DATA_DIR / "MO_Zones.kmz"
-# Tech,Town,State -- one row per technician, at the town they dispatch from
-DISPATCH_TECHS_PATH = DATA_DIR / "dispatch_techs.csv"
+# The MBS techs query: Tech, Town, State, Active, Tech ID, Primary Region,
+# Departments. A tech with no Town is placed at their region's hub town.
+DISPATCH_TECHS_PATH = DATA_DIR / "tech_info.csv"
 # Type,Town,State -- one row per staging site, e.g. Generator,Warrensburg,MO
 DISPATCH_STAGING_PATH = DATA_DIR / "dispatch_staging.csv"
 

@@ -32,7 +32,12 @@ OPTIONAL_COLUMNS = {
     "service mix": ("ServiceMix", "string"),
     "residential customers": ("ResidentialCustomers", "Int64"),
     "business customers": ("BusinessCustomers", "Int64"),
+    # Town-center coordinates, when the export carries them. A town without them
+    # (or with an impossible value) is geocoded instead.
+    "latitude": ("SourceLat", "Float64"),
+    "longitude": ("SourceLon", "Float64"),
 }
+COORD_LIMITS = {"SourceLat": 90.0, "SourceLon": 180.0}
 
 
 def _group_num(s: str) -> int:
@@ -103,10 +108,13 @@ def _read_frame(path: Path, *, unassigned_label: str | None) -> pd.DataFrame:
     for name, dtype in OPTIONAL_COLUMNS.values():
         if name not in found:
             df[name] = pd.array([pd.NA] * len(df), dtype=dtype)
-        elif dtype == "Int64":
-            df[name] = pd.to_numeric(df[name], errors="coerce").astype("Int64")
+        elif dtype in ("Int64", "Float64"):
+            df[name] = pd.to_numeric(df[name], errors="coerce").astype(dtype)
         else:
             df[name] = df[name].astype("string").str.strip().replace("", pd.NA)
+
+    for name, limit in COORD_LIMITS.items():
+        df.loc[df[name].abs() > limit, name] = pd.NA
 
     blank = df["Group"] == ""
     if unassigned_label is None:
@@ -132,24 +140,41 @@ def load_city_points(
     *,
     unassigned_label: str | None = UNASSIGNED_GROUP_LABEL,
 ) -> tuple[gpd.GeoDataFrame, list[str]]:
-    # Geocodes the spreadsheet into city points, EPSG:3857. A town the geocoder
-    # cannot place is dropped with the rest of its rows.
+    # City points in EPSG:3857, from the export's own coordinates where it has them
+    # and the geocoder otherwise. A town neither can place is dropped with the rest
+    # of its rows.
     path = Path(path)
     df = _read_frame(path, unassigned_label=unassigned_label)
     ordered_groups = sorted(df["Group"].unique().tolist(), key=_group_num)
 
-    # Geocoding
-    unique_places = df[["Full Location", "City", "State"]].drop_duplicates().reset_index(drop=True)
+    unique_places = (
+        df.groupby("Full Location", sort=False)
+        .agg(
+            City=("City", "first"),
+            State=("State", "first"),
+            SourceLat=("SourceLat", "first"),
+            SourceLon=("SourceLon", "first"),
+        )
+        .reset_index()
+    )
+    has_coords = unique_places["SourceLat"].notna() & unique_places["SourceLon"].notna()
     total_places = len(unique_places)
-    print(f"\nStarting geocoding process for {total_places} unique cities...")
+    print(
+        f"\n{int(has_coords.sum())} of {total_places} towns carry coordinates; "
+        f"geocoding the other {int((~has_coords).sum())}..."
+    )
 
     lat_list, lon_list = [], []
     for i, row in unique_places.iterrows():
+        if has_coords[i]:
+            lat_list.append(float(row["SourceLat"]))
+            lon_list.append(float(row["SourceLon"]))
+            continue
         res = geocode_city_state(row["City"], row["State"], f"({i + 1}/{total_places})")
         lat_list.append(res["lat"] if res else None)
         lon_list.append(res["lon"] if res else None)
 
-    print(f"Geocoding complete! Processed {total_places} cities.\n")
+    print(f"Located {total_places} towns.\n")
     unique_places["Latitude"] = lat_list
     unique_places["Longitude"] = lon_list
     df = df.merge(

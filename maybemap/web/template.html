@@ -101,9 +101,14 @@
         <button type="button" data-mode="selected">Selected town</button>
         <button type="button" data-mode="none">No lines</button>
       </div>
+      <div id="deptSection">
+        <div class="field-label">Departments · which techs count</div>
+        <div class="seg seg3" id="deptButtons"></div>
+      </div>
       <div class="inline-field"><label for="count">Connections per town</label><select id="count" class="select"><option value="1">1 nearest</option><option value="2">2 nearest</option></select></div>
       <label class="label-toggle" for="showTechNames"><span><b>Tech names</b><small id="techNamesHint"></small></span><input type="checkbox" role="switch" id="showTechNames"></label>
       <label class="label-toggle" for="showTownNames"><span><b>Town names</b><small id="townNamesHint"></small></span><input type="checkbox" role="switch" id="showTownNames"></label>
+      <p class="route-note" id="unplacedNote" hidden></p>
       <p class="route-note">Drive miles and times are OSRM's fastest route between town centers, without live traffic, worked out when the map was built. Lines are connectors, not road shapes.</p>
     </div>
   </section>

@@ -3,6 +3,7 @@
 // the page itself makes no data requests, only tile requests.
 const D = JSON.parse(document.getElementById('map-data').textContent);
 const places = D.dispatch.places;
+const techs = D.dispatch.techs;
 const cities = D.cities;
 const $ = sel => document.querySelector(sel);
 
@@ -30,6 +31,7 @@ const DEFAULTS = {
   techNames: true,
   townNames: false,
   stagingOn: Object.fromEntries(stagingTypes.map(t => [t, false])),
+  depts: allOn(D.departments),
   basemap: 'gray',
   placeLabels: true,
 };
@@ -80,7 +82,7 @@ function townInfo(key) {
   const pi = placeIdxByKey.has(key) ? placeIdxByKey.get(key) : -1;
   const place = pi >= 0 ? places[pi] : null;
   const src = city || place;
-  return { key, city, pi, place, name: src.name, state: src.state, lat: src.lat, lon: src.lon, techs: place ? place.techs : [] };
+  return { key, city, pi, place, name: src.name, state: src.state, lat: src.lat, lon: src.lon, techs: place ? place.techs.map(i => techs[i]) : [] };
 }
 
 function esc(s) {
@@ -99,6 +101,16 @@ const mapsPlace = t => 'https://www.google.com/maps/search/?api=1&query=' + enco
 function directions(a, b) {
   return 'https://www.google.com/maps/dir/?api=1&origin=' + encodeURIComponent(a.lat + ',' + a.lon) +
     '&destination=' + encodeURIComponent(b.lat + ',' + b.lon) + '&travelmode=driving';
+}
+
+// ---------- Techs and the department filter ----------
+// A tech counts when any of their departments is switched on; one the export
+// gave no department is never filtered out
+const techOn = t => !t.departments.length || t.departments.some(d => state.depts[d]);
+const activeTechs = p => p.techs.map(i => techs[i]).filter(techOn);
+// Names for a label or row; a crowded base (a region hub can hold a dozen) is a count
+function techList(list, max = 2) {
+  return list.length <= max ? list.map(t => t.name).join(', ') : list.length + ' techs';
 }
 
 // ---------- Filters shared by dots and outlines ----------
@@ -224,32 +236,36 @@ function renderDots() {
 function nearest(i, n, techsOnly) {
   const out = [];
   for (let j = 0; j < places.length; j++) {
-    if (techsOnly ? !places[j].techs.length : j === i) continue;
+    if (techsOnly ? !activeTechs(places[j]).length : j === i) continue;
     out.push({ j, m: D.dispatch.meters[i][j], s: D.dispatch.seconds[i][j] });
   }
   return out.sort((a, b) => a.s - b.s || a.m - b.m).slice(0, n);
 }
 const pinLayer = L.layerGroup();
 const routeLayer = L.layerGroup();
+function pinIcon(tech, selected) {
+  return L.divIcon({
+    className: '', html: '<div class="pin' + (tech ? ' tech' : '') + (selected ? ' selected' : '') + '"></div>',
+    iconSize: tech ? [21, 21] : [17, 17], iconAnchor: tech ? [10, 10] : [8, 8],
+  });
+}
 const pins = places.map((p, i) => {
-  const tech = p.techs.length > 0;
-  const mk = L.marker([p.lat, p.lon], {
-    icon: L.divIcon({ className: '', html: '<div class="pin' + (tech ? ' tech' : '') + '"></div>', iconSize: tech ? [21, 21] : [17, 17], iconAnchor: tech ? [10, 10] : [8, 8] }),
-    zIndexOffset: tech ? 500 : 0,
-  }).addTo(pinLayer);
+  const mk = L.marker([p.lat, p.lon], { icon: pinIcon(false, false) }).addTo(pinLayer);
   mk.on('click', () => select(keyOf(p.name, p.state), false));
   return mk;
 });
 function pinLabel(p) {
   const parts = [];
-  const tech = p.techs.length && state.techNames;
-  if (tech) parts.push('<span class="name">' + esc(p.techs.join(', ')) + '</span>');
+  const on = activeTechs(p);
+  const tech = on.length && state.techNames;
+  if (tech) parts.push('<span class="name">' + esc(techList(on)) + '</span>');
   if (state.townNames || (tech && !compactLabels())) parts.push('<span class="twn">' + esc(p.name) + '</span>');
   return parts.join(' <span>—</span> ');
 }
 function pinTitle(p) {
   const note = getNote(keyOf(p.name, p.state)) ? ' 📝' : '';
-  return (p.techs.length ? p.techs.join(', ') + ' — ' : '') + p.name + note;
+  const on = activeTechs(p);
+  return (on.length ? techList(on) + ' — ' : '') + p.name + note;
 }
 // Permanent labels are placed greedily: techs first, each taking the first side of
 // its pin (right, left, above, below) that does not cover a label already placed.
@@ -267,17 +283,20 @@ const overlap = (a, b) => Math.max(0, Math.min(a[0] + a[2], b[0] + b[2]) - Math.
 // their labels drop the town name until there is room for it
 const compactLabels = () => map.getZoom() < 8;
 function labelText(p) {
-  if (p.techs.length && state.techNames) return p.techs.join(', ') + (compactLabels() ? '' : ' — ' + p.name);
+  const on = activeTechs(p);
+  if (on.length && state.techNames) return techList(on) + (compactLabels() ? '' : ' — ' + p.name);
   return p.name;
 }
 function renderPins() {
   const placed = [];
-  const order = places.map((p, i) => i).sort((a, b) => places[b].techs.length - places[a].techs.length);
+  const count = places.map(p => activeTechs(p).length);
+  const order = places.map((p, i) => i).sort((a, b) => count[b] - count[a]);
   for (const i of order) {
     const p = places[i];
     const mk = pins[i];
-    const node = mk.getElement && mk.getElement();
-    if (node && node.firstChild) node.firstChild.classList.toggle('selected', selectedKey === keyOf(p.name, p.state));
+    // The department filter decides which pins are tech pins, so the icon follows it
+    mk.setIcon(pinIcon(count[i] > 0, selectedKey === keyOf(p.name, p.state)));
+    mk.setZIndexOffset(count[i] > 0 ? 500 : 0);
     if (mk.getTooltip()) mk.unbindTooltip();
     const label = pinLabel(p);
     let side = null;
@@ -286,11 +305,11 @@ function renderPins() {
       const w = labelText(p).length * 6.8 + 20, h = 24;
       const crowding = LABEL_SIDES.map(sd => placed.reduce((sum, r) => sum + overlap(r, sd.box(pt, w, h)), 0));
       const best = crowding.indexOf(Math.min(...crowding));
-      if (crowding[best] === 0 || p.techs.length) side = LABEL_SIDES[best];
+      if (crowding[best] === 0 || count[i]) side = LABEL_SIDES[best];
       if (side) placed.push(side.box(pt, w, h));
     }
     if (side) {
-      mk.bindTooltip(label, { permanent: true, direction: side.direction, offset: side.offset, className: p.techs.length ? 'techlabel' : 'marketlabel', opacity: 0.97 });
+      mk.bindTooltip(label, { permanent: true, direction: side.direction, offset: side.offset, className: count[i] ? 'techlabel' : 'marketlabel', opacity: 0.97 });
     } else {
       mk.bindTooltip(esc(pinTitle(p)), { direction: 'top', offset: [0, -8], className: 'hover-tip' });
     }
@@ -406,8 +425,9 @@ function rowEntry(rank, t, from, e, techRow) {
   const num = el('div', 'num' + (techRow ? ' tech' : ''), String(rank));
   const detail = el('div', 'detail');
   const dest = places[e.j];
-  detail.append(el('b', '', techRow ? dest.techs.join(', ') : dest.name),
-    el('small', '', techRow ? dest.name : dest.techs.length ? 'Tech: ' + dest.techs.join(', ') : 'Dispatch town'));
+  const destTechs = activeTechs(dest);
+  detail.append(el('b', '', techRow ? techList(destTechs, 3) : dest.name),
+    el('small', '', techRow ? dest.name : destTechs.length ? 'Tech: ' + techList(destTechs) : 'Dispatch town'));
   const val = el('div', 'value');
   val.append(el('b', '', e.j === from ? 'Here' : miles(e.m) + ' mi'), el('small', '', e.j === from ? 'Based in this town' : duration(e.s)));
   if (e.j !== from) {
@@ -431,7 +451,6 @@ function renderCard() {
   const where = c ? [c.county ? c.county + ' County' : null, c.regioned ? c.region : 'No region', c.zone].filter(Boolean).join(' · ')
     : 'Tech base · not in the city export';
   sub.append(document.createTextNode(where));
-  if (t.techs.length) { sub.append(document.createTextNode(' · ')); sub.append(el('span', 'tech', 'Tech: ' + t.techs.join(', '))); }
   box.append(sub);
 
   if (c) {
@@ -439,6 +458,20 @@ function renderCard() {
     facts.append(fact(fmt(c.customers), 'Customers'), fact(fmt(c.active), 'Active addresses'), fact(fmt(c.tasks), 'Tasks, 6 months'), fact(c.mix || '—', 'Service mix'));
     if (c.residential !== null && c.business !== null) facts.append(fact(fmt(c.residential), 'Residential'), fact(fmt(c.business), 'Business'));
     box.append(facts);
+  }
+
+  if (t.techs.length) {
+    box.append(el('div', 'field-label', 'Technicians based here'));
+    const list = el('div', 'tech-list');
+    for (const tech of t.techs) {
+      const row = el('div', 'tech-row' + (techOn(tech) ? '' : ' off'));
+      row.append(el('b', '', tech.name));
+      const bits = [tech.departments.join(', ') || 'No department', tech.region];
+      if (tech.basis === 'region') bits.push('no home town · placed at region hub');
+      row.append(el('small', '', bits.filter(Boolean).join(' · ')));
+      list.append(row);
+    }
+    box.append(list);
   }
 
   if (t.pi >= 0) {
@@ -479,7 +512,7 @@ function renderCard() {
 const searchIndex = allKeys.map(key => {
   const t = townInfo(key);
   const c = t.city;
-  return { key, t, text: [t.name, t.state, t.techs.join(' '), c ? c.region : '', c && c.zone ? c.zone : ''].join(' ').toLowerCase() };
+  return { key, t, text: [t.name, t.state, t.techs.map(x => x.name + ' ' + (x.id || '')).join(' '), c ? c.region : '', c && c.zone ? c.zone : ''].join(' ').toLowerCase() };
 });
 function renderDirectory() {
   const q = $('#townFilter').value.trim().toLowerCase();
@@ -492,7 +525,7 @@ function renderDirectory() {
     const btn = el('button', 'town' + (s.key === selectedKey ? ' active' : ''));
     btn.type = 'button';
     btn.append(el('i', 'dot' + (s.t.techs.length ? ' tech' : '')),
-      el('span', '', (s.t.techs.length ? s.t.techs.join(', ') + ' — ' : '') + s.t.name + (getNote(s.key) ? ' 📝' : '')));
+      el('span', '', (s.t.techs.length ? techList(s.t.techs) + ' — ' : '') + s.t.name + (getNote(s.key) ? ' 📝' : '')));
     btn.addEventListener('click', () => select(s.key, true));
     box.append(btn);
   }
@@ -560,6 +593,21 @@ for (const t of D.serviceTypes) {
   $('#mixButtons').append(btn);
 }
 
+for (const d of D.departments) {
+  const n = techs.filter(t => t.departments.includes(d)).length;
+  const btn = el('button');
+  btn.type = 'button';
+  btn.dataset.value = d;
+  btn.append(document.createTextNode(d), el('small', '', n + (n === 1 ? ' tech' : ' techs')));
+  btn.addEventListener('click', () => { state.depts[d] = !state.depts[d]; update(); });
+  $('#deptButtons').append(btn);
+}
+if (!D.departments.length) $('#deptSection').hidden = true;
+if (D.dispatch.unplaced.length) {
+  $('#unplacedNote').hidden = false;
+  $('#unplacedNote').textContent = 'Not on the map (no town and no known region in the tech export): ' + D.dispatch.unplaced.join(', ') + '.';
+}
+
 for (const name of Object.keys(state.layers)) {
   $('#layer-' + name).addEventListener('change', e => { state.layers[name] = e.target.checked; update(); });
 }
@@ -621,6 +669,7 @@ function renderControls() {
   setSeg('#modeButtons', b => b.dataset.mode === state.routeMode);
   setSeg('#bucketButtons', (b, i) => state.buckets[i]);
   setSeg('#mixButtons', b => state.mix[b.dataset.value]);
+  setSeg('#deptButtons', b => state.depts[b.dataset.value]);
   for (const [name, preset] of Object.entries(PRESETS)) {
     const match = Object.entries(preset).every(([k, v]) => state.layers[k] === v);
     document.querySelector('[data-preset="' + name + '"]').classList.toggle('active', match);
@@ -628,7 +677,7 @@ function renderControls() {
 
   const visibleZones = zoneNames.filter(z => state.zonesOn[z]).length;
   const filtered = cities.filter(cityPasses);
-  const techCount = places.reduce((n, p) => n + p.techs.length, 0);
+  const techCount = techs.filter(techOn).length;
   $('#zonesHint').textContent = visibleZones + ' of ' + zoneNames.length + ' zones shown';
   $('#outlinesHint').textContent = D.outlines.features.filter(f => cityPasses(cities[f.properties.city])).length + ' of ' + D.outlines.features.length + ' city limits match the filters';
   $('#dotsHint').textContent = filtered.length + ' of ' + cities.length + ' towns match the filters';
@@ -708,7 +757,7 @@ $('#notesExport').addEventListener('click', () => {
   for (const key of Object.keys(notes).sort()) {
     if (!getNote(key) || !allKeys.includes(key)) continue;
     const t = townInfo(key);
-    rows.push([t.name, t.state, t.techs.join(', '), getNote(key)]);
+    rows.push([t.name, t.state, t.techs.map(x => x.name).join(', '), getNote(key)]);
   }
   download('﻿' + rows.map(r => r.map(escapeCSV).join(',')).join('\r\n'), 'Town_Notes.csv');
 });

@@ -76,6 +76,21 @@ def city_csv(tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def no_network(monkeypatch):
+    # .env may hold a real Geoapify key, so an unstubbed lookup would really go
+    # out. Any call that reaches the network fails the test instead.
+    from maybemap import routing
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("a test reached the network; stub the lookup")
+
+    monkeypatch.setattr(geocoding.SESSION, "get", refuse)
+    monkeypatch.setattr(routing.SESSION, "get", refuse)
+    monkeypatch.setattr(geocoding.ox, "geocode_to_gdf", refuse)
+    monkeypatch.setattr(geocoding.ox, "features_from_point", refuse)
+
+
+@pytest.fixture(autouse=True)
 def isolated_caches(monkeypatch, tmp_path):
     # Every test starts from empty caches that live in its own temp folder, so a
     # developer's real cache can neither answer a lookup nor be written to
