@@ -116,7 +116,7 @@ def test_a_long_run_of_misses_aborts(monkeypatch, spreadsheet, seeded_cache):
     monkeypatch.setattr(cities, "OSM_MAX_CONSECUTIVE_FALLBACKS", 3)
     monkeypatch.setattr(cities, "fetch_osm_city_polygon", lambda *a, **k: None)
     monkeypatch.setattr(cities, "cache_osm_polygon", lambda *a, **k: None)
-    monkeypatch.setattr(cities, "get_cached_osm_polygon", lambda *a, **k: None)
+    monkeypatch.setattr(cities, "get_cached_osm_polygon", lambda *a, **k: geocoding.NOT_CACHED)
 
     points, _ = cities.load_city_points(spreadsheet)
     with pytest.raises(RuntimeError, match="3 cities in a row returned no OSM boundary"):
@@ -136,7 +136,7 @@ def test_scattered_misses_are_tolerated(monkeypatch, spreadsheet, seeded_cache):
     monkeypatch.setattr(cities, "OSM_MAX_CONSECUTIVE_FALLBACKS", 3)
     monkeypatch.setattr(cities, "fetch_osm_city_polygon", sometimes)
     monkeypatch.setattr(cities, "cache_osm_polygon", lambda *a, **k: None)
-    monkeypatch.setattr(cities, "get_cached_osm_polygon", lambda *a, **k: None)
+    monkeypatch.setattr(cities, "get_cached_osm_polygon", lambda *a, **k: geocoding.NOT_CACHED)
 
     points, _ = cities.load_city_points(spreadsheet)
     boundaries = cities.load_city_boundaries(points)
@@ -247,7 +247,7 @@ def test_a_missing_boundary_is_left_empty(monkeypatch, spreadsheet, seeded_cache
     # the honest answer
     from maybemap.sources import cities
 
-    monkeypatch.setattr(cities, "get_cached_osm_polygon", lambda *a, **k: None)
+    monkeypatch.setattr(cities, "get_cached_osm_polygon", lambda *a, **k: geocoding.NOT_CACHED)
     monkeypatch.setattr(cities, "fetch_osm_city_polygon", lambda *a, **k: None)
     monkeypatch.setattr(cities, "cache_osm_polygon", lambda *a, **k: None)
     monkeypatch.setattr(cities, "OSM_MAX_CONSECUTIVE_FALLBACKS", 99)
@@ -327,3 +327,25 @@ def test_an_empty_geocode_answer_is_cached_as_not_found(monkeypatch):
     assert geocoding.geocode_city_state("Nowhere", "MO") is None
     assert geocoding.GEOCODE_CACHE["Nowhere, Missouri"] is None
     del geocoding.GEOCODE_CACHE["Nowhere, Missouri"]
+
+
+def test_the_cache_tells_unknown_from_known_empty(monkeypatch):
+    monkeypatch.setitem(geocoding.BOUNDARY_WKT, "NOWHERE, MISSOURI", None)
+    assert geocoding.get_cached_osm_polygon("Nowhere", "MO") is None
+    assert geocoding.get_cached_osm_polygon("Elsewhere", "MO") is geocoding.NOT_CACHED
+
+
+def test_a_known_missing_boundary_is_not_looked_up_again(monkeypatch, spreadsheet, seeded_cache):
+    # Every town's answer is already "no boundary": the build must neither re-ask
+    # Nominatim and Overpass for them nor read the run of known misses as an outage
+    from maybemap.sources import cities
+
+    asked = []
+    monkeypatch.setattr(cities, "OSM_MAX_CONSECUTIVE_FALLBACKS", 2)
+    monkeypatch.setattr(cities, "get_cached_osm_polygon", lambda *a, **k: None)
+    monkeypatch.setattr(cities, "fetch_osm_city_polygon", lambda *a, **k: asked.append(a))
+    points, _ = cities.load_city_points(spreadsheet)
+
+    boundaries = cities.load_city_boundaries(points)
+    assert asked == []
+    assert boundaries.geometry.isna().all()

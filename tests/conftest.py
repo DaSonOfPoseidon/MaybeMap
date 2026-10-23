@@ -97,7 +97,7 @@ def stub_city_boundaries(monkeypatch):
         fetched.append(city)
         return Point(-92.5, 38.9).buffer(0.05)
 
-    monkeypatch.setattr(cities, "get_cached_osm_polygon", lambda *a, **k: None)
+    monkeypatch.setattr(cities, "get_cached_osm_polygon", lambda *a, **k: geocoding.NOT_CACHED)
     monkeypatch.setattr(cities, "cache_osm_polygon", lambda *a, **k: None)
     monkeypatch.setattr(cities, "fetch_osm_city_polygon", fetch)
     return fetched

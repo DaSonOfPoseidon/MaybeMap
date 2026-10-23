@@ -14,6 +14,7 @@ from maybemap.config import (
     UNASSIGNED_GROUP_LABEL,
 )
 from maybemap.geocoding import (
+    NOT_CACHED,
     cache_osm_polygon,
     fetch_osm_city_polygon,
     geocode_city_state,
@@ -190,7 +191,8 @@ def load_city_boundaries(gdf_points):
         progress = f"({i + 1}/{total_cities})"
 
         geom_ll = get_cached_osm_polygon(city, state)
-        if geom_ll is None:
+        fetched = geom_ll is NOT_CACHED
+        if fetched:
             geom_ll = fetch_osm_city_polygon(
                 city, state, pt_lookup[(city, state)], progress, county=row.County
             )
@@ -199,11 +201,13 @@ def load_city_boundaries(gdf_points):
             print(f"Using cached boundary: {city}, {state} {progress}")
 
         if geom_ll is None:
+            total_fallbacks += 1
             # Overpass can answer 200 with an empty result when it is really
             # timing out or serving the wrong extract, which no exception catches.
-            # A long unbroken run of misses is the only signal that reaches here.
-            consecutive_fallbacks += 1
-            total_fallbacks += 1
+            # A long unbroken run of fresh misses is the only signal that reaches
+            # here; a miss answered from the cache is a known gap, not that signal.
+            if fetched:
+                consecutive_fallbacks += 1
             if consecutive_fallbacks >= OSM_MAX_CONSECUTIVE_FALLBACKS:
                 raise RuntimeError(
                     f"{consecutive_fallbacks} cities in a row returned no OSM boundary, "

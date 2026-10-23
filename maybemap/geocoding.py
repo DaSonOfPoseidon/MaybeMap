@@ -141,14 +141,23 @@ def geocode_city_state(city: str, state: str, progress_info: str = ""):
     return res
 
 
+# What get_cached_osm_polygon returns for a town never looked up, as distinct from
+# None: a cached answer that the town has no boundary, which needs no new lookup
+NOT_CACHED = object()
+
+
 def get_cached_osm_polygon(city: str, state: str):
     key = f"{city}, {state_full(state)}".upper()
-    w = BOUNDARY_WKT.get(key, None)
+    if key not in BOUNDARY_WKT:
+        return NOT_CACHED
+    w = BOUNDARY_WKT[key]
     if not w:
         return None
     geom = wkt.loads(w)
     g = gpd.GeoSeries([geom], crs=4326).to_crs(3857)
-    if g.iloc[0].area > MAX_CANDIDATE_AREA_M2:  # discard too-large cached shapes
+    if g.iloc[0].area > MAX_CANDIDATE_AREA_M2:
+        # Too large to be a town; a fresh lookup filters the same way, so it is
+        # as good as an answer of "no boundary"
         return None
     return geom
 
