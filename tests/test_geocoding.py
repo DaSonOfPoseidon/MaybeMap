@@ -349,3 +349,42 @@ def test_a_known_missing_boundary_is_not_looked_up_again(monkeypatch, spreadshee
     boundaries = cities.load_city_boundaries(points)
     assert asked == []
     assert boundaries.geometry.isna().all()
+
+
+def test_misses_that_trip_the_abort_are_not_cached(monkeypatch, spreadsheet, seeded_cache):
+    # The run of misses is the outage signal; caching it would make the outage
+    # permanent, since the next build would read every one as a known gap
+    from maybemap.sources import cities
+
+    cached = []
+    monkeypatch.setattr(cities, "OSM_MAX_CONSECUTIVE_FALLBACKS", 3)
+    monkeypatch.setattr(cities, "get_cached_osm_polygon", lambda *a, **k: geocoding.NOT_CACHED)
+    monkeypatch.setattr(cities, "fetch_osm_city_polygon", lambda *a, **k: None)
+    monkeypatch.setattr(cities, "cache_osm_polygon", lambda c, s, g: cached.append((c, g)))
+    points, _ = cities.load_city_points(spreadsheet)
+
+    with pytest.raises(RuntimeError, match="in a row"):
+        cities.load_city_boundaries(points)
+    assert cached == []
+
+
+def test_scattered_misses_are_cached_once_the_run_finishes(monkeypatch, spreadsheet, seeded_cache):
+    from maybemap.sources import cities
+
+    cached = {}
+    seen = []
+
+    def sometimes(city, state, pt, progress="", county=""):
+        seen.append(city)
+        return None if len(seen) % 2 else Point(-92.5, 38.9).buffer(0.05)
+
+    monkeypatch.setattr(cities, "OSM_MAX_CONSECUTIVE_FALLBACKS", 3)
+    monkeypatch.setattr(cities, "get_cached_osm_polygon", lambda *a, **k: geocoding.NOT_CACHED)
+    monkeypatch.setattr(cities, "fetch_osm_city_polygon", sometimes)
+    monkeypatch.setattr(cities, "cache_osm_polygon", lambda c, s, g: cached.update({c: g}))
+    points, _ = cities.load_city_points(spreadsheet)
+
+    cities.load_city_boundaries(points)
+    # Every answer is kept: the hits, and the misses the run proved were genuine
+    assert set(cached) == set(seen)
+    assert sum(g is None for g in cached.values()) == 2

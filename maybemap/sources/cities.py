@@ -186,6 +186,10 @@ def load_city_boundaries(gdf_points):
 
     records = []
     consecutive_fallbacks = total_fallbacks = 0
+    # Fresh misses wait here until something shows the lookup is working -- a fresh
+    # hit, or the run finishing without tripping the outage check -- so the misses
+    # that do trip it are never cached as permanent "no boundary" answers
+    pending_misses = []
     for i, row in city_records.iterrows():
         city, state, group = row.City, row.State, row.Group
         progress = f"({i + 1}/{total_cities})"
@@ -196,7 +200,13 @@ def load_city_boundaries(gdf_points):
             geom_ll = fetch_osm_city_polygon(
                 city, state, pt_lookup[(city, state)], progress, county=row.County
             )
-            cache_osm_polygon(city, state, geom_ll)
+            if geom_ll is None:
+                pending_misses.append((city, state))
+            else:
+                cache_osm_polygon(city, state, geom_ll)
+                for missed in pending_misses:
+                    cache_osm_polygon(*missed, None)
+                pending_misses.clear()
         else:
             print(f"Using cached boundary: {city}, {state} {progress}")
 
@@ -223,6 +233,8 @@ def load_city_boundaries(gdf_points):
 
         records.append({"City": city, "State": state, "Group": group, "geometry": geom_3857})
 
+    for missed in pending_misses:
+        cache_osm_polygon(*missed, None)
     print(
         f"OSM boundary fetching complete! Processed {total_cities} cities, "
         f"{total_cities - total_fallbacks} with real boundaries and "

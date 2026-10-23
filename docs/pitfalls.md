@@ -13,8 +13,12 @@ A geocoder, boundary or routing call that never got an answer (network error, ra
 (raise and cache nothing). Look at every `return None` inside an `except` or retry loop,
 and at every cache write that follows it.
 
-**Where:** the pre-push gate on the combined-map branch (`geoapify_forward`, and the
-Overpass fallback in `fetch_osm_city_polygon`).
+The quiet variant: an empty answer that might really be an outage (an unbroken run of
+misses) is cached before the outage check runs. When the check then fires, the evidence
+is already saved as permanent "nothing there".
+
+**Where:** the pre-push gate on the combined-map branch (`geoapify_forward`, the Overpass
+fallback in `fetch_osm_city_polygon`, and the miss caching in `load_city_boundaries`).
 
 ## Data inlined into a `<script>` block
 
