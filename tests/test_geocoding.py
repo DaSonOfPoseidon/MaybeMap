@@ -65,7 +65,7 @@ def test_an_empty_response_is_a_real_answer(monkeypatch):
         ResponseStatusCodeError("overpass-api.de returned HTTP status code 429"),
     ],
 )
-def test_every_kind_of_failure_is_retried_then_reported(monkeypatch, capsys, exc):
+def test_every_kind_of_failure_is_retried_then_raised(monkeypatch, exc):
     calls = []
 
     def boom(*args, **kwargs):
@@ -73,10 +73,10 @@ def test_every_kind_of_failure_is_retried_then_reported(monkeypatch, capsys, exc
         raise exc
 
     monkeypatch.setattr(geocoding.ox, "features_from_point", boom)
-    assert _fetch() is None
-    # Retried to the limit rather than mistaken for "this town has no boundary"
+    # Retried to the limit, then raised rather than mistaken for "no boundary"
+    with pytest.raises(RuntimeError, match="failed after 3 attempts"):
+        _fetch()
     assert len(calls) == OSM_FETCH_RETRIES
-    assert "failed after 3 attempts" in capsys.readouterr().out
 
 
 def test_a_blip_is_retried_rather_than_fatal(monkeypatch):
@@ -191,14 +191,15 @@ def test_a_municipality_is_accepted_by_place_rank_when_untyped(monkeypatch):
     assert _fetch().symmetric_difference(BOUNDARY).area < 1e-9
 
 
-def test_an_overpass_outage_is_survivable_when_it_is_only_the_fallback(monkeypatch, capsys):
-    # One unreachable fallback probe must not end a run Nominatim is answering
+def test_an_overpass_outage_stops_the_run(monkeypatch):
+    # Swallowed, the outage became None, and the caller cached None as "this town
+    # has no boundary" -- a dot forever, from one bad minute of network
     def boom(*args, **kwargs):
         raise requests.ConnectionError("Connection refused")
 
     monkeypatch.setattr(geocoding.ox, "features_from_point", boom)
-    assert _fetch() is None
-    assert "Overpass request for Nowhere, Missouri failed" in capsys.readouterr().out
+    with pytest.raises(RuntimeError, match="Overpass request for Nowhere, Missouri failed"):
+        _fetch()
 
 
 def test_the_county_disambiguates_a_shared_name(monkeypatch):
@@ -283,3 +284,46 @@ def test_a_geocode_in_the_expected_state_is_kept(monkeypatch):
     assert geocoding.geocode_city_state("La Monte", "MO")["lat"] == 38.77
     monkeypatch.setattr(geocoding, "GEOCODE_CACHE", {})
     assert geocoding.geocode_city_state("La Monte", "Missouri")["lat"] == 38.77
+
+
+class _Response:
+    def __init__(self, status, payload=None):
+        self.status_code = status
+        self._payload = payload or {}
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"HTTP {self.status_code}")
+
+    def json(self):
+        return self._payload
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [requests.ConnectionError("Connection refused"), _Response(429), _Response(503)],
+    ids=["network", "rate-limited", "server-error"],
+)
+def test_a_failed_geocode_raises_and_is_never_cached(monkeypatch, answer):
+    # A town the geocoder could not be asked about is not a town it could not find
+    def get(*args, **kwargs):
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setenv("GEOAPIFY_KEY", "test")
+    monkeypatch.setattr(geocoding.SESSION, "get", get)
+    monkeypatch.setattr(geocoding, "_save_geocode_cache", lambda: None)
+    with pytest.raises(RuntimeError, match="Geoapify"):
+        geocoding.geocode_city_state("Nowhere", "MO")
+    assert "Nowhere, Missouri" not in geocoding.GEOCODE_CACHE
+
+
+def test_an_empty_geocode_answer_is_cached_as_not_found(monkeypatch):
+    monkeypatch.setenv("GEOAPIFY_KEY", "test")
+    monkeypatch.setattr(geocoding.SESSION, "get", lambda *a, **k: _Response(200, {"features": []}))
+    monkeypatch.setattr(geocoding, "_save_geocode_cache", lambda: None)
+    monkeypatch.delitem(geocoding.GEOCODE_CACHE, "Nowhere, Missouri", raising=False)
+    assert geocoding.geocode_city_state("Nowhere", "MO") is None
+    assert geocoding.GEOCODE_CACHE["Nowhere, Missouri"] is None
+    del geocoding.GEOCODE_CACHE["Nowhere, Missouri"]

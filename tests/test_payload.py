@@ -1,5 +1,5 @@
 # The payload the page draws from, built end to end against the fixture export and
-# the real KMZ, with geocoding, boundaries and OSRM all stubbed.
+# the generated KMZ, with geocoding, boundaries and OSRM all stubbed.
 
 import json
 
@@ -29,11 +29,11 @@ def rosters(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def built(city_csv, seeded_cache, stub_city_boundaries, rosters):
+def built(city_csv, seeded_cache, stub_city_boundaries, rosters, kmz_path):
     techs, staging = rosters
     return payload.build(
         city_path=city_csv,
-        kmz_path=config.KMZ_PATH,
+        kmz_path=kmz_path,
         techs_path=techs,
         staging_path=staging,
         matrix=fake_matrix,
@@ -85,13 +85,15 @@ def test_payload_is_strict_json(built):
     json.dumps(built, allow_nan=False)
 
 
-def test_staging_at_an_unknown_town_raises(city_csv, seeded_cache, stub_city_boundaries, rosters):
+def test_staging_at_an_unknown_town_raises(
+    city_csv, seeded_cache, stub_city_boundaries, rosters, kmz_path
+):
     techs, staging = rosters
     staging.write_text("Type,Town,State\nOutage,Nowhere,MO\n")
     with pytest.raises(ValueError, match="Nowhere, MO is not a dispatch place"):
         payload.build(
             city_path=city_csv,
-            kmz_path=config.KMZ_PATH,
+            kmz_path=kmz_path,
             techs_path=techs,
             staging_path=staging,
             matrix=fake_matrix,

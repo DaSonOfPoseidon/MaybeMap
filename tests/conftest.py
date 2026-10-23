@@ -1,6 +1,8 @@
 # Shared fixtures: a generated spreadsheet and a pre-seeded geocode cache, so the
 # tests need neither a Geoapify key nor network access.
 
+import zipfile
+
 import pandas as pd
 import pytest
 
@@ -99,3 +101,44 @@ def stub_city_boundaries(monkeypatch):
     monkeypatch.setattr(cities, "cache_osm_polygon", lambda *a, **k: None)
     monkeypatch.setattr(cities, "fetch_osm_city_polygon", fetch)
     return fetched
+
+
+# Three zones shaped like the ArcGIS export: no <name>, the label only in the
+# <description> table, and the color in a shared PolyStyle (aabbggrr). Rectangles
+# roughly over Missouri, so the fixture cities land in the zones they would really
+# be in and Chicago lands in none.
+FIXTURE_ZONES = [
+    ("MO West", "7fff7000", (-95.7, 36.0, -93.0, 40.6)),
+    ("MO East", "7f00aaff", (-91.5, 36.0, -89.2, 40.6)),
+    ("MO Central", "7fa80084", (-93.0, 36.0, -91.5, 40.6)),
+]
+
+
+def _placemark(index, label, box):
+    x0, y0, x1, y1 = box
+    ring = " ".join(f"{x},{y},0" for x, y in [(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)])
+    return f"""<Placemark id="ID_{index}"><name></name>
+<description><![CDATA[<table><tr><td>Area</td><td>{label}</td></tr></table>]]></description>
+<styleUrl>#Style{index}</styleUrl>
+<Polygon><outerBoundaryIs><LinearRing><coordinates>{ring}</coordinates></LinearRing>
+</outerBoundaryIs></Polygon></Placemark>"""
+
+
+@pytest.fixture(scope="session")
+def kmz_path(tmp_path_factory):
+    styles = "".join(
+        f'<Style id="Style{i}"><PolyStyle><color>{color}</color></PolyStyle></Style>'
+        for i, (_, color, _) in enumerate(FIXTURE_ZONES)
+    )
+    marks = "".join(_placemark(i, label, box) for i, (label, _, box) in enumerate(FIXTURE_ZONES))
+    kml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+        f"{styles}<Folder>{marks}</Folder></Document></kml>"
+    )
+    path = tmp_path_factory.mktemp("kmz") / "zones.kmz"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("doc.kml", kml)
+        # ArcGIS ships a stylesheet beside the KML; the loader has to skip it
+        archive.writestr("layer.xsl", "<xsl/>")
+    return path

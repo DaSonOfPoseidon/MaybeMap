@@ -8,7 +8,13 @@ import pytest
 
 from maybemap import page
 
-PAYLOAD = {"title": "Test & Map", "note": "</script><script>alert(1)</script>"}
+PAYLOAD = {
+    "title": "Test & Map",
+    "note": "</script><script>alert(1)</script>",
+    # An HTML comment opener followed by <script puts the parser into the
+    # double-escaped state, where the real closing tag no longer ends the block
+    "region": "<!--<script>",
+}
 
 
 def _data(html):
@@ -20,6 +26,8 @@ def test_payload_round_trips_and_cannot_close_its_script():
     html = page.render(PAYLOAD)
     assert _data(html) == PAYLOAD
     assert "</script><script>alert" not in html
+    data_block = html.split('id="map-data">', 1)[1].split("</script>", 1)[0]
+    assert "<" not in data_block
 
 
 def test_assets_are_inlined_and_markers_consumed():

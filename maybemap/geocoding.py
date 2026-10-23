@@ -69,6 +69,9 @@ def _require_api_key() -> str:
 
 
 def geoapify_forward(text: str, *, retries: int = 3, backoff: float = 0.8):
+    # None means Geoapify answered and found nothing. A request that never got an
+    # answer -- network error, rate limit, server error -- raises instead, so the
+    # caller cannot cache an outage as "this town does not exist".
     url = "https://api.geoapify.com/v1/geocode/search"
     params = {
         "text": text,
@@ -76,28 +79,33 @@ def geoapify_forward(text: str, *, retries: int = 3, backoff: float = 0.8):
         "limit": 1,
         "filter": "countrycode:us",
     }
+    problem = "no attempts made"
     for attempt in range(1, retries + 1):
         try:
             r = SESSION.get(url, params=params, timeout=15)
             if r.status_code == 429:
-                time.sleep(backoff * attempt)
-                continue
-            r.raise_for_status()
-            feats = r.json().get("features") or []
-            if not feats:
-                return None
-            lon, lat = feats[0]["geometry"]["coordinates"]
-            props = feats[0].get("properties") or {}
-            return {
-                "lon": float(lon),
-                "lat": float(lat),
-                "state_code": props.get("state_code"),
-            }
-        except requests.RequestException:
-            if attempt == retries:
-                return None
+                problem = "rate limited (HTTP 429)"
+            else:
+                r.raise_for_status()
+                feats = r.json().get("features") or []
+                if not feats:
+                    return None
+                lon, lat = feats[0]["geometry"]["coordinates"]
+                props = feats[0].get("properties") or {}
+                return {
+                    "lon": float(lon),
+                    "lat": float(lat),
+                    "state_code": props.get("state_code"),
+                }
+        except requests.RequestException as exc:
+            problem = f"{type(exc).__name__}: {exc}"
+        if attempt < retries:
             time.sleep(backoff * attempt)
-    return None
+    raise RuntimeError(
+        f"Geoapify lookup for {text!r} failed after {retries} attempts ({problem}). "
+        f"Towns geocoded so far are saved in {GEOCODE_CACHE_PATH.name}, so rerunning "
+        f"resumes from here."
+    )
 
 
 def geocode_city_state(city: str, state: str, progress_info: str = ""):
@@ -274,14 +282,10 @@ def fetch_osm_city_polygon(
     geom_ll = _boundary_from_nominatim(city, state, county)
     source = "Nominatim"
     if geom_ll is None:
-        try:
-            geom_ll = _boundary_from_overpass(city, state, pt_3857)
-        except RuntimeError as exc:
-            # Overpass is only the fallback now, so one unreachable probe should not
-            # end a run Nominatim is otherwise answering. A systemic outage still
-            # trips the consecutive-fallback guard in the caller.
-            print(f"   {exc}")
-            return None
+        # An Overpass outage raises out of here rather than becoming None: the
+        # caller caches None as "no boundary", which would keep the town a dot
+        # long after the network came back
+        geom_ll = _boundary_from_overpass(city, state, pt_3857)
         source = "Overpass"
     if geom_ll is None:
         return None

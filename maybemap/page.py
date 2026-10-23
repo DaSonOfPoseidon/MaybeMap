@@ -11,11 +11,12 @@ WEB_DIR = Path(__file__).resolve().parent / "web"
 
 
 def _inline_json(payload: dict) -> str:
-    # Inside <script type="application/json"> the only thing that can end the block
-    # early is "</", so it is written as the equivalent JSON escape "<\/". NaN is
-    # refused outright: Python writes it, but JSON.parse rejects the whole page.
+    # Every "<" is written as the JSON escape \u003c, so nothing in the data can
+    # close the script block early or open a comment that hides the real closing
+    # tag ("<!--<script"). NaN is refused outright: Python writes it, but
+    # JSON.parse rejects the whole page.
     text = json.dumps(payload, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
-    return text.replace("</", "<\\/")
+    return text.replace("<", "\\u003c")
 
 
 def render(payload: dict) -> str:

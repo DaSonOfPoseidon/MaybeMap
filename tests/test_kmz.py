@@ -1,4 +1,5 @@
-# Tests for the KMZ zone loader, run against the real MO_Zones.kmz.
+# Tests for the KMZ zone loader, run against a generated KMZ in the ArcGIS export
+# format (the real one is business data and stays out of the repo).
 
 import pytest
 
@@ -14,8 +15,8 @@ EXPECTED_COLORS = {
 
 
 @pytest.fixture(scope="module")
-def zones():
-    return load_kmz_zones(config.KMZ_PATH)
+def zones(kmz_path):
+    return load_kmz_zones(kmz_path)
 
 
 def _colors(zones):
@@ -58,9 +59,9 @@ def test_zones_do_not_overlap(zones):
             assert a.intersection(b).area == pytest.approx(0.0, abs=1.0)
 
 
-def test_color_override_beats_the_kml_style(monkeypatch):
+def test_color_override_beats_the_kml_style(monkeypatch, kmz_path):
     monkeypatch.setitem(config.ZONE_COLOR_OVERRIDES, "MO West", "#123456")
-    colors = _colors(load_kmz_zones(config.KMZ_PATH))
+    colors = _colors(load_kmz_zones(kmz_path))
     assert colors["MO West"] == "#123456"
     assert colors["MO East"] == EXPECTED_COLORS["MO East"]
 
@@ -77,9 +78,12 @@ def test_kml_color_alpha():
     assert kml_color_to_hex("7fff7000")[1] == pytest.approx(0.498, abs=0.001)
 
 
-def test_rejects_malformed_kml_color():
+@pytest.mark.parametrize("bad", ["abc", 'ff"><img', "zz000000"])
+def test_rejects_malformed_kml_color(bad):
+    # The color lands in style attributes on the page, so anything but hex digits
+    # is refused rather than passed through
     with pytest.raises(ValueError):
-        kml_color_to_hex("abc")
+        kml_color_to_hex(bad)
 
 
 def test_darken_scales_each_channel():

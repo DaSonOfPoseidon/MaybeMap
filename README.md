@@ -107,4 +107,4 @@ run of misses stops the build, because it means the lookup is broken
 uv run ruff check . && uv run black --check . && uv run pytest
 ```
 
-The tests stub every network call. The KMZ tests read the real `data/MO_Zones.kmz`.
+The tests stub every network call. Business data never enters the tests: the KMZ tests use a generated KMZ in the same ArcGIS format.

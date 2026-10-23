@@ -1,9 +1,20 @@
 .env
 
-# Business data, lookup caches and the built map stay local
+# Business data, lookup caches and the built map stay local (this repo is public)
 data/
 cache/
 output/
+
+# A stray export or build product dropped anywhere else stays out too
+*.csv
+*.xlsx
+*.kmz
+*.json
+*.geojson
+*.html
+*.png
+# The page template is source, not output
+!maybemap/web/*.html
 
 __pycache__/
 .pytest_cache/

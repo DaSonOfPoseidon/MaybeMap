@@ -34,6 +34,16 @@ const DEFAULTS = {
   placeLabels: true,
 };
 
+// Options with a fixed set of values: a saved value outside the set (an old
+// version's, or hand-edited storage) falls back to the default instead of
+// leaving no basemap or a route mode nothing handles
+const CHOICES = {
+  zoneOpacity: ['light', 'medium', 'strong'],
+  routeMode: ['neighbors', 'staff', 'selected', 'none'],
+  routeCount: [1, 2],
+  basemap: ['gray', 'satellite', 'streets'],
+};
+
 // Saved state only overrides keys it still has the right shape for, so a zone or
 // region added since the last visit starts visible rather than undefined.
 function mergeState(saved) {
@@ -44,6 +54,7 @@ function mergeState(saved) {
     if (got === undefined || got === null) continue;
     if (Array.isArray(v)) { if (Array.isArray(got) && got.length === v.length) s[k] = got.map(Boolean); }
     else if (typeof v === 'object') { for (const name of Object.keys(v)) if (typeof got[name] === 'boolean') s[k][name] = got[name]; }
+    else if (CHOICES[k]) { if (CHOICES[k].includes(got)) s[k] = got; }
     else if (typeof got === typeof v) s[k] = got;
   }
   return s;
