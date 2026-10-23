@@ -89,3 +89,39 @@ def test_customers_is_optional(tmp_path):
 
     without = _frame(tmp_path, [("Columbia", "MO", "Central")], ["City", "State", "Region"])
     assert without["Customers"].isna().all()
+
+
+def test_export_coordinates_are_used_without_geocoding(tmp_path, monkeypatch):
+    path = tmp_path / "with_coords.csv"
+    path.write_text(
+        "City,State,Region,Latitude,Longitude\n"
+        "COLUMBIA,MO,Central,38.95,-92.33\n"
+        "SPRINGFIELD,MO,,,\n"
+    )
+    asked = []
+
+    def geocode(city, state, progress=""):
+        asked.append(city)
+        return {"lat": 37.2, "lon": -93.29}
+
+    monkeypatch.setattr(cities, "geocode_city_state", geocode)
+    points, _ = cities.load_city_points(path)
+    ll = points.to_crs(4326).set_index("City").geometry
+    # Only the town the export left blank goes to the geocoder
+    assert asked == ["Springfield"]
+    assert (round(ll["Columbia"].y, 2), round(ll["Columbia"].x, 2)) == (38.95, -92.33)
+
+
+@pytest.mark.parametrize("lat,lon", [("91", "-92.3"), ("38.9", "-200"), ("abc", "-92.3")])
+def test_unusable_export_coordinates_fall_back_to_geocoding(tmp_path, monkeypatch, lat, lon):
+    path = tmp_path / "bad_coords.csv"
+    path.write_text(f"City,State,Region,Latitude,Longitude\nCOLUMBIA,MO,Central,{lat},{lon}\n")
+    asked = []
+    monkeypatch.setattr(
+        cities,
+        "geocode_city_state",
+        lambda c, s, p="": asked.append(c) or {"lat": 38.95, "lon": -92.33},
+    )
+    points, _ = cities.load_city_points(path)
+    assert asked == ["Columbia"]
+    assert len(points) == 1

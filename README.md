@@ -37,16 +37,18 @@ two are rebuilt by the build. Deleting `cache/` is safe; the next build just tak
 
 | File | What it is |
 |---|---|
-| `serviced_cities.csv` | The MBS export: `City, County, State, Region, Customers, Active Addresses, Tasks 6 Mo, Service Mix, Residential Customers, Business Customers`. An `.xlsx` works too; point `CITY_DATA_PATH` at it. |
+| `serviced_cities.csv` | The MBS cities query: `City, State, County, Region, Latitude, Longitude, Customers, Residential Customers, Business Customers, Service Mix, Active Addresses, Tasks 6 Mo`. One row per town. An `.xlsx` works too; point `CITY_DATA_PATH` at it. |
 | `MO_Zones.kmz` | The zone polygons, exported from ArcGIS. Colors come from the KML styles. |
-| `dispatch_techs.csv` | `Tech, Town, State`: one row per technician, at the town they work from. |
+| `tech_info.csv` | The MBS techs query: `Tech, Town, State, Active, Tech ID, Primary Region, Departments`. Town may be blank (see below). Rows with `Active` = N are skipped. A plain `Tech, Town, State` roster also works. |
 | `dispatch_staging.csv` | `Type, Town, State`: one row per staging site. Each Type becomes its own switch. |
 
 Column names are matched case-insensitively. The roster CSVs are optional; without them
 the dispatch layer routes town to town with no techs, and there is no staging section.
 
-Geocoding a town the cache has not seen needs a [Geoapify](https://www.geoapify.com/) key
-in `.env` (see `.env.example`). Nothing else needs a key.
+A town with `Latitude`/`Longitude` in the export is placed exactly there. A town without
+them, or with impossible values, is geocoded instead. Geocoding a town the cache has not
+seen needs a [Geoapify](https://www.geoapify.com/) key in `.env` (see `.env.example`).
+Nothing else needs a key.
 
 ## Layers
 
@@ -82,6 +84,16 @@ A town is in the dispatch set if it has a Region in the export, or if it is a te
 home town. Tech towns are always added, so a technician is never unroutable. The build
 prints which tech towns had no region. To add any other town to dispatch, give it a
 region in the export.
+
+A tech with no Town is placed at the **hub of their Primary Region**: the region's most
+central town, meaning the one with the least total straight-line distance to the
+region's other towns. Their card says so, since drive times from there are an estimate
+of where they start. A tech with neither a Town nor a known region can't be placed. The
+build names them, and so does the dispatch section of the page.
+
+The **Departments** buttons in the dispatch section choose which techs count. Tech pins,
+labels and "nearest tech" results only consider techs in a selected department, so with
+only TC on, "nearest tech" means the nearest TC tech.
 
 ## Drive times
 
