@@ -74,6 +74,7 @@ switches. They are not separate views.
 - **Staging sites**: badges on the staging towns, one switch per type.
 - **Basemap**: Light gray, Satellite or Streets, with optional place names.
 
+In the town search, each result shows its state; Enter opens the first result and Escape clears the box.
 Click any dot, outline or pin to open its card. The card shows customer detail, region and
 zone, the **3 closest techs** (every town gets them, timed from each tech's home town), the
 3 closest dispatch towns by drive time, Google Maps links, and **notes**. For a dispatch town, a

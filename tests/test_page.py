@@ -189,10 +189,47 @@ def test_search_box_follows_how_a_town_was_opened():
     # Only the main search's result buttons pass fromSearch
     directory = re.search(r"^function renderDirectory\(\) \{.*?^\}$", source, re.M | re.S)
     assert directory and "select(s.key, true, true)" in directory.group(0)
+    # ... and so does Enter in the main search, which opens the first result
+    assert "select(first.key, true, true)" in _town_filter_keydown(source)
     call = r"(?<![\w.])select\((?:keyOf\([^()]*\)|[\w.]+), (?:true|false)(?:, true)?\)"
     calls = re.findall(call, source)
-    assert len(calls) == 6
-    assert sum(c.endswith(", true, true)") for c in calls) == 1
+    assert len(calls) == 7
+    assert sum(c.endswith(", true, true)") for c in calls) == 2
+
+
+def _town_filter_keydown(source):
+    handler = re.search(
+        r"^\$\('#townFilter'\)\.addEventListener\('keydown', .*?^\}\);$", source, re.M | re.S
+    )
+    assert handler, "#townFilter has no keydown handler"
+    return handler.group(0)
+
+
+def test_search_results_show_the_state():
+    # Towns share names across states, so every result row reads "Name, ST" (through el(), so
+    # textContent), the same as the drive-time suggestions
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    directory = re.search(r"^function renderDirectory\(\) \{.*?^\}$", source, re.M | re.S)
+    assert directory
+    assert "el('span', '', s.t.name + ', ' + s.t.state + (getNote(s.key) ? ' 📝' : ''))" in (
+        directory.group(0)
+    )
+    assert ".innerHTML" not in directory.group(0)
+
+
+def test_town_search_has_enter_and_escape():
+    # Like the drive-time search: Enter opens the first result shown (as a search-result
+    # selection, so the query stays), Escape clears the box and the list
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    body = _town_filter_keydown(source)
+    assert "'Enter'" in body and "'Escape'" in body
+    assert "directoryHits(" in body and "preventDefault()" in body
+    assert "select(first.key, true, true)" in body
+    escape = body[body.index("'Escape'") :]
+    assert ".value = ''" in escape and "renderDirectory()" in escape
+    # The result list and Enter share one hit list, so Enter opens exactly the first row shown
+    directory = re.search(r"^function renderDirectory\(\) \{.*?^\}$", source, re.M | re.S)
+    assert directory and "directoryHits(" in directory.group(0)
 
 
 def test_sidebar_order_is_search_then_destination_then_card_then_layers():
