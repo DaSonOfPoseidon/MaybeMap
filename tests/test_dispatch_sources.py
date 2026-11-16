@@ -2,7 +2,7 @@
 
 import pytest
 
-from maybemap.sources.dispatch import load_staging, load_techs
+from maybemap.sources.dispatch import load_region_hubs, load_staging, load_techs
 
 
 def _csv(tmp_path, text, name="roster.csv", encoding="utf-8"):
@@ -101,3 +101,30 @@ def test_an_inactive_tech_with_no_state_is_still_just_skipped(tmp_path):
         _csv(tmp_path, "Tech,Town,State,Active\nPat Q,Clinton,,N\nSam R,Sedalia,MO,Y\n")
     )
     assert df["Tech"].tolist() == ["Sam R"]
+
+
+def test_region_hubs_load_as_region_to_town_and_state(tmp_path):
+    path = _csv(tmp_path, "region,hub,state\n Zz R ,ZZ TOWN,Missouri\n,,\n", "hubs.csv")
+    assert load_region_hubs(path) == {"Zz R": ("Zz Town", "MO")}
+
+
+def test_a_missing_region_hubs_file_means_no_overrides(tmp_path, capsys):
+    assert load_region_hubs(tmp_path / "nope.csv") == {}
+    assert "nope.csv" in capsys.readouterr().out
+
+
+def test_a_region_hub_with_no_state_is_named(tmp_path):
+    path = _csv(tmp_path, "Region,Hub,State\nZz R,Zz Town,\n", "hubs.csv")
+    with pytest.raises(ValueError, match="Zz R"):
+        load_region_hubs(path)
+
+
+def test_two_different_hubs_for_one_region_raise(tmp_path):
+    path = _csv(tmp_path, "Region,Hub,State\nZz R,Zz One,MO\nZz R,Zz Two,MO\n", "hubs.csv")
+    with pytest.raises(ValueError, match="Zz R"):
+        load_region_hubs(path)
+
+
+def test_region_hubs_need_their_columns(tmp_path):
+    with pytest.raises(ValueError, match="Region, Hub, State"):
+        load_region_hubs(_csv(tmp_path, "Region,Town\nZz R,Zz Town\n", "hubs.csv"))

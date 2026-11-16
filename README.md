@@ -41,6 +41,7 @@ two are rebuilt by the build. Deleting `cache/` is safe; the next build just tak
 | `MO_Zones.kmz` | The zone polygons, exported from ArcGIS. Colors come from the KML styles. |
 | `tech_info.csv` | The MBS techs query: `Tech, Town, State, Active, Tech ID, Primary Region, Departments`. Town may be blank (see below), but a Town needs its State: a Town with no State stops the build and names the row. Rows with `Active` = N are skipped. A plain `Tech, Town, State` roster also works. |
 | `dispatch_staging.csv` | `Type, Town, State`: one row per staging site. Each Type becomes its own switch. A Town needs its State: a Town with no State stops the build and names the row. |
+| `region_hubs.csv` | Optional. `Region, Hub, State`: the town a region's hub should be, overriding the customer-count rule (see below). A Hub needs its State. |
 
 Column names are matched case-insensitively, and CSVs may be plain UTF-8 or Excel's
 "CSV UTF-8". The roster CSVs are optional; without them the dispatch layer routes town to
@@ -89,11 +90,18 @@ home town. Tech towns are always added, so a technician is never unroutable. The
 prints which tech towns had no region. To add any other town to dispatch, give it a
 region in the export.
 
-A tech with no Town is placed at the **hub of their Primary Region**: the region's most
-central town, meaning the one with the least total straight-line distance to the
-region's other towns. Their card says so, since drive times from there are an estimate
-of where they start. A tech with neither a Town nor a known region can't be placed. The
-build names them, and so does the dispatch section of the page.
+A tech with no Town is placed at the **hub of their Primary Region**: the region's town
+with the most customers (the export's `Customers` count). Their card says so, since drive
+times from there are an estimate of where they start. A town with no count is skipped. A
+tie goes to the town whose name appears in the region's name, then to the name first in
+order. The build prints each hub it picked this way, so you can confirm it. To pick a
+different town, add a row to `data/region_hubs.csv` (`Region,Hub,State`); a row always wins
+over the counts. If a Primary Region lists several regions separated by commas, the tech is
+placed at the **first** one's hub, and the build prints the tech and the region it chose. A
+region where no town has a count and no row names a hub stops the build, naming the region
+and the file to edit, but only when a tech with no Town needs that region. A tech with
+neither a Town nor a known region can't be placed. The build names them, and so does the
+dispatch section of the page.
 
 The **Departments** buttons in the dispatch section choose which techs count. They decide
 which orange pins show (a town outside the service area, where a counted tech lives) and
