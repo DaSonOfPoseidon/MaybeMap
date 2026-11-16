@@ -237,14 +237,15 @@ function renderOutlines() {
   }
 }
 
-// Dot size comes from the town's customer count in tiers (radius in px), 10,000 and up being the largest.
+// Dot size comes from the town's customer count in tiers (radius in px), 1,000 and up being the largest.
 // These are the legend's rows too, and are separate from the customer-count filter buckets
 const DOT_TIERS = [
   { lo: 1, r: 4 },
-  { lo: 50, r: 6.5 },
-  { lo: 250, r: 9 },
-  { lo: 1000, r: 12 },
-  { lo: 10000, r: 16 },
+  { lo: 10, r: 6 },
+  { lo: 25, r: 8 },
+  { lo: 100, r: 10 },
+  { lo: 250, r: 12.5 },
+  { lo: 1000, r: 16 },
 ];
 // A town with no count (or none) gets this dot, smaller than the first tier
 const MISSING_DOT = 3.5;

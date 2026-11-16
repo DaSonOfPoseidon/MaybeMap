@@ -63,7 +63,7 @@ switches. They are not separate views.
 - **City outlines**: real OSM city limits for every town that has a region. They are
   shaded in their zone's color while Zones is on, and in their region's color otherwise.
 - **City dots**: a dot for every serviced town, in its region's color, sized by customer
-  count (dots come in tiers by customer count, 10,000 and up being the largest, and the
+  count (dots come in tiers by customer count, 1,000 and up being the largest, and the
   legend lists the tiers). Towns with no region are gray, and their switch (Unassigned, under Regions) starts
   off, so the gray dots stay hidden until it is turned on.
 - **Filters**: customer count, service type and region. These apply to both dots
