@@ -72,17 +72,24 @@ def test_assets_are_read_and_written_as_utf8(tmp_path, monkeypatch):
     # fall back to the locale's encoding (cp1252 on a stock Windows install)
     import pathlib
 
-    seen = []
-    for name in ("read_text", "write_text"):
-        original = getattr(pathlib.Path, name)
+    reads = []
+    original = pathlib.Path.read_text
 
-        def checked(self, *args, _original=original, _name=name, **kwargs):
-            seen.append((_name, kwargs.get("encoding")))
-            return _original(self, *args, **kwargs)
+    def checked(self, *args, **kwargs):
+        reads.append((self.name, kwargs.get("encoding")))
+        return original(self, *args, **kwargs)
 
-        monkeypatch.setattr(pathlib.Path, name, checked)
-    page.write(PAYLOAD, tmp_path / "map.html")
-    assert seen and all(enc == "utf-8" for _, enc in seen)
+    monkeypatch.setattr(pathlib.Path, "read_text", checked)
+    text = "Sainte-Geneviève ✓"
+    out = page.write({**PAYLOAD, "town": text}, tmp_path / "map.html")
+
+    # Each of the three assets was read, and every read named utf-8
+    assert {name for name, _ in reads} == {"template.html", "app.css", "app.js"}
+    assert all(enc == "utf-8" for _, enc in reads), reads
+    # Write side: page.write goes through os.fdopen, not Path.write_text, so the
+    # spy above never sees it. The payload is dumped without ASCII escapes, so the
+    # text reaches the file raw and its UTF-8 bytes must be there.
+    assert text.encode("utf-8") in out.read_bytes()
 
 
 def test_atomic_writes_cover_the_caches_too(tmp_path, monkeypatch):
