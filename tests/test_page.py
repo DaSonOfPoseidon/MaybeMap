@@ -119,7 +119,7 @@ def test_atomic_write_creates_folders(tmp_path):
 
 
 def test_department_changes_refresh_the_open_card():
-    # The town card lists nearest technicians, which the department filter decides,
+    # The town card lists its closest techs, which the department filter decides,
     # but update() leaves the card alone, so every handler that flips a department
     # has to re-render it as well
     source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
@@ -139,3 +139,23 @@ def test_card_offers_a_drive_time_search_that_keeps_its_destination():
     assert re.search(r"^let driveToKey\b", source, re.M)
     card = re.search(r"^function renderCard\(\) \{.*?^\}$", source, re.M | re.S)
     assert card and "driveToSection(" in card.group(0)
+
+
+def test_search_results_are_labeled_by_town_only():
+    # A tech's name in a result label made towns look like people; the index still holds the
+    # tech names, so searching one finds their town
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    directory = re.search(r"^function renderDirectory\(\) \{.*?^\}$", source, re.M | re.S)
+    assert directory and "techList(" not in directory.group(0)
+    index = re.search(r"^const searchIndex = .*?^\}\);$", source, re.M | re.S)
+    assert index and "x.name" in index.group(0)
+
+
+def test_card_shows_the_closest_techs_for_every_town():
+    # The section is built outside the dispatch-town branch, or a town with no region gets none
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    card = re.search(r"^function renderCard\(\) \{.*?^\}$", source, re.M | re.S)
+    assert card and "closestTechsSection(t)" in card.group(0)
+    assert "closestTechsSection" not in re.search(
+        r"if \(t\.pi >= 0\) \{.*?\n  \}", card.group(0), re.S
+    ).group(0)

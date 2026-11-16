@@ -75,6 +75,10 @@ const placeIdxByKey = new Map(places.map((p, i) => [keyOf(p.name, p.state), i]))
 const zoneByLabel = new Map(D.zones.features.map(f => [f.properties.label, f.properties]));
 const regionColor = new Map(D.regions.map(r => [r.name, r.color]));
 const allKeys = [...new Set([...cityByKey.keys(), ...placeIdxByKey.keys()])];
+// Where each tech place's row sits in dispatch.toCity, and where each town outside the dispatch
+// set has its column
+const techRowOfPlace = new Map(D.dispatch.techPlaces.map((p, k) => [p, k]));
+const toCityCol = new Map(D.dispatch.toCity.ids.map((id, k) => [id, k]));
 let selectedKey = null;
 // The destination picked in the open card's drive-time search. It outlives the open town, so
 // another start town shows the time from there; renderCard() reads it, so whatever changes it
@@ -244,6 +248,11 @@ function nearest(i, n, techsOnly) {
     out.push({ j, m: D.dispatch.meters[i][j], s: D.dispatch.seconds[i][j] });
   }
   return out.sort((a, b) => a.s - b.s || a.m - b.m).slice(0, n);
+}
+// The n closest of [{tech, m, s, here}]: least drive time, then distance, then name. A
+// tech based in the town itself is 0 and 0, so they come first without a special case
+function closestTechs(rows, n = 3) {
+  return [...rows].sort((a, b) => a.s - b.s || a.m - b.m || a.tech.name.localeCompare(b.tech.name)).slice(0, n);
 }
 // Indexes of the places a search matches: a substring of "name, state", prefix
 // matches first, then by name. The start town and an empty query give nothing
@@ -436,26 +445,68 @@ function fact(value, label) {
   f.append(el('b', '', value), el('small', '', label));
   return f;
 }
-function rowEntry(rank, t, from, e, techRow) {
+function rowEntry(rank, t, e) {
   const row = el('button', 'rowentry');
   row.type = 'button';
-  const num = el('div', 'num' + (techRow ? ' tech' : ''), String(rank));
+  const num = el('div', 'num', String(rank));
   const detail = el('div', 'detail');
   const dest = places[e.j];
   const destTechs = activeTechs(dest);
-  detail.append(el('b', '', techRow ? techList(destTechs, 3) : dest.name),
-    el('small', '', techRow ? dest.name : destTechs.length ? 'Tech: ' + techList(destTechs) : 'Dispatch town'));
+  detail.append(el('b', '', dest.name),
+    el('small', '', destTechs.length ? 'Tech: ' + techList(destTechs) : 'Dispatch town'));
   const val = el('div', 'value');
-  val.append(el('b', '', e.j === from ? 'Here' : miles(e.m) + ' mi'), el('small', '', e.j === from ? 'Based in this town' : duration(e.s)));
-  if (e.j !== from) {
-    const a = el('a', '', 'Google route ↗');
-    a.href = directions(t, dest); a.target = '_blank'; a.rel = 'noopener';
-    a.addEventListener('click', ev => ev.stopPropagation());
-    val.append(a);
-  }
+  val.append(el('b', '', miles(e.m) + ' mi'), el('small', '', duration(e.s)));
+  val.append(routeLink(t, dest));
   row.append(num, detail, val);
   row.addEventListener('click', () => select(keyOf(dest.name, dest.state), true));
   return row;
+}
+function routeLink(from, to) {
+  const a = el('a', '', 'Google route ↗');
+  a.href = directions(from, to); a.target = '_blank'; a.rel = 'noopener';
+  a.addEventListener('click', ev => ev.stopPropagation());
+  return a;
+}
+// Drive time from a tech's home place p to the open town: the matrix for a dispatch town,
+// the tech table for one outside it. null when the payload has neither
+function timeFromPlace(p, t) {
+  if (t.pi >= 0) return { m: D.dispatch.meters[p][t.pi], s: D.dispatch.seconds[p][t.pi] };
+  const col = t.city ? toCityCol.get(t.city.id) : undefined;
+  const row = techRowOfPlace.get(p);
+  if (col === undefined || row === undefined) return null;
+  return { m: D.dispatch.toCity.meters[row][col], s: D.dispatch.toCity.seconds[row][col] };
+}
+// "3 closest techs": every active tech, timed from their home town (or region hub) to this town
+function closestTechsSection(t) {
+  const rows = [];
+  for (const tech of techs.filter(techOn)) {
+    const time = timeFromPlace(tech.place, t);
+    if (!time) return null;
+    rows.push({ tech, m: time.m, s: time.s, here: tech.place === t.pi });
+  }
+  const wrap = el('div');
+  wrap.append(el('div', 'field-label', '3 closest techs · from their home town'));
+  if (!rows.length) {
+    wrap.append(el('p', 'route-note', 'No technicians match the department filter.'));
+    return wrap;
+  }
+  closestTechs(rows).forEach((r, i) => {
+    const home = places[r.tech.place];
+    const row = el('button', 'rowentry');
+    row.type = 'button';
+    const detail = el('div', 'detail');
+    detail.append(el('b', '', r.tech.name), el('small', '', [
+      r.tech.departments.join(', ') || 'No department',
+      r.tech.basis === 'region' ? home.name + ' · region hub, no home town' : home.name,
+    ].join(' · ')));
+    const val = el('div', 'value');
+    val.append(el('b', '', r.here ? 'Here' : miles(r.m) + ' mi'), el('small', '', r.here ? 'Based in this town' : duration(r.s)));
+    if (!r.here) val.append(routeLink(home, t));
+    row.append(el('div', 'num tech', String(i + 1)), detail, val);
+    row.addEventListener('click', () => select(keyOf(home.name, home.state), true));
+    wrap.append(row);
+  });
+  return wrap;
 }
 // "Drive time to…": a search over the dispatch towns, and the one answer picked from it
 function driveToSection(t) {
@@ -500,7 +551,7 @@ function driveToSection(t) {
     if (j === t.pi) {
       result.append(el('p', 'route-note', 'Same town: ' + places[j].name + ', ' + places[j].state + '.'));
     } else {
-      result.append(rowEntry('→', t, t.pi, { j, m: D.dispatch.meters[t.pi][j], s: D.dispatch.seconds[t.pi][j] }, false));
+      result.append(rowEntry('→', t, { j, m: D.dispatch.meters[t.pi][j], s: D.dispatch.seconds[t.pi][j] }));
     }
     const clear = el('button', 'clear', '✕');
     clear.type = 'button';
@@ -548,15 +599,14 @@ function renderCard() {
 
   if (t.pi >= 0) {
     box.append(el('div', 'field-label', '3 closest dispatch towns · drive time'));
-    nearest(t.pi, 3, false).forEach((e, i) => box.append(rowEntry(i + 1, t, t.pi, e, false)));
-    const techs = nearest(t.pi, 2, true);
-    if (techs.length) {
-      box.append(el('div', 'field-label', techs.length === 1 ? 'Nearest technician' : '2 nearest technicians'));
-      techs.forEach((e, i) => box.append(rowEntry(i + 1, t, t.pi, e, true)));
-    }
+    nearest(t.pi, 3, false).forEach((e, i) => box.append(rowEntry(i + 1, t, e)));
+  }
+  const closest = closestTechsSection(t);
+  if (closest) box.append(closest);
+  if (t.pi >= 0) {
     box.append(driveToSection(t));
   } else {
-    box.append(el('p', 'route-note', 'Not in the dispatch set: only towns with a region, and tech bases, have drive times.'));
+    box.append(el('p', 'route-note', 'Not a dispatch town, so no closest-towns list or drive-time search: only towns with a region, and tech bases, have those.'));
   }
 
   const links = el('div', 'btnrow');
@@ -598,7 +648,7 @@ function renderDirectory() {
     const btn = el('button', 'town' + (s.key === selectedKey ? ' active' : ''));
     btn.type = 'button';
     btn.append(el('i', 'dot' + (s.t.techs.length ? ' tech' : '')),
-      el('span', '', (s.t.techs.length ? techList(s.t.techs) + ' — ' : '') + s.t.name + (getNote(s.key) ? ' 📝' : '')));
+      el('span', '', s.t.name + (getNote(s.key) ? ' 📝' : '')));
     btn.addEventListener('click', () => select(s.key, true));
     box.append(btn);
   }
@@ -672,7 +722,7 @@ for (const d of D.departments) {
   btn.type = 'button';
   btn.dataset.value = d;
   btn.append(document.createTextNode(d), el('small', '', n + (n === 1 ? ' tech' : ' techs')));
-  // The open card's nearest technicians depend on the department filter too
+  // The open card's closest techs depend on the department filter too
   btn.addEventListener('click', () => { state.depts[d] = !state.depts[d]; update(); renderCard(); });
   $('#deptButtons').append(btn);
 }

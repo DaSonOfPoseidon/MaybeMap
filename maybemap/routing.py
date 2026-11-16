@@ -1,7 +1,7 @@
-# Drive distance and time between every pair of dispatch places, from OSRM's table
-# service. Fetched at build time and cached per pair. Only rows and columns that
-# still hold a missing pair are requested, so an unchanged town list makes no
-# requests at all.
+# Drive distance and time between dispatch places (and from tech home towns to the
+# other towns), from OSRM's table service. Fetched at build time and cached per
+# directional pair. Only rows and columns that still hold a missing pair are
+# requested, so an unchanged town list makes no requests at all.
 
 import json
 import time
@@ -77,60 +77,78 @@ def _table(coords: list[tuple[float, float]], sources: list[int], destinations: 
     raise AssertionError("unreachable")  # the loop always returns or raises
 
 
-def drive_matrix(
-    points: list[tuple[float, float]], *, cache: dict | None = None, persist: bool = True
+def drive_table(
+    origins: list[tuple[float, float]],
+    destinations: list[tuple[float, float]],
+    *,
+    cache: dict | None = None,
+    persist: bool = True,
 ) -> tuple[list[list[int]], list[list[int]]]:
-    # Returns (meters, seconds), each points x points, rounded to whole units.
-    # Raises rather than leave a hole: a dispatch map quietly missing drive times
-    # is worse than no map.
+    # Returns (meters, seconds), each len(origins) x len(destinations), rounded to whole
+    # units. Pairs are directional (origin -> destination) and cached per pair. Two
+    # points with the same key are 0 apart without asking OSRM. Raises rather than
+    # leave a hole: a dispatch map quietly missing drive times is worse than no map.
     if cache is None:
         cache = load_cache()
-    keys = [_point_key(lat, lon) for lat, lon in points]
-    n = len(points)
+    okeys = [_point_key(lat, lon) for lat, lon in origins]
+    dkeys = [_point_key(lat, lon) for lat, lon in destinations]
 
-    missing = {
+    pairs = {
         (i, j)
-        for i in range(n)
-        for j in range(n)
-        if i != j and _pair_key(keys[i], keys[j]) not in cache
+        for i in range(len(origins))
+        for j in range(len(destinations))
+        if okeys[i] != dkeys[j]
     }
+    missing = {(i, j) for i, j in pairs if _pair_key(okeys[i], dkeys[j]) not in cache}
     if missing:
         rows = sorted({i for i, _ in missing})
         cols = sorted({j for _, j in missing})
-        print(f"Fetching {len(missing)} drive-time pairs from OSRM ({n} places)...")
+        print(
+            f"Fetching {len(missing)} drive-time pairs from OSRM "
+            f"({len(origins)} origins, {len(destinations)} destinations)..."
+        )
         for src in _chunks(rows, OSRM_CHUNK):
             for dst in _chunks(cols, OSRM_CHUNK):
                 if not any((i, j) in missing for i in src for j in dst):
                     continue
-                # A place in both lists is sent once and indexed from both
-                members = sorted(set(src) | set(dst))
-                index = {p: k for k, p in enumerate(members)}
+                # A point in both lists is sent once and indexed from both
+                coords: dict[str, tuple[float, float]] = {}
+                for i in src:
+                    coords.setdefault(okeys[i], origins[i])
+                for j in dst:
+                    coords.setdefault(dkeys[j], destinations[j])
+                index = {k: n for n, k in enumerate(coords)}
                 distances, durations = _table(
-                    [points[p] for p in members],
-                    [index[i] for i in src],
-                    [index[j] for j in dst],
+                    list(coords.values()),
+                    [index[okeys[i]] for i in src],
+                    [index[dkeys[j]] for j in dst],
                 )
                 for a, i in enumerate(src):
                     for b, j in enumerate(dst):
-                        if i == j:
+                        if okeys[i] == dkeys[j]:
                             continue
                         meters, seconds = distances[a][b], durations[a][b]
                         if meters is None or seconds is None:
                             raise RuntimeError(
-                                f"OSRM found no road route between points {points[i]} "
-                                f"and {points[j]}. Check that town's coordinates."
+                                f"OSRM found no road route between points {origins[i]} "
+                                f"and {destinations[j]}. Check that town's coordinates."
                             )
-                        cache[_pair_key(keys[i], keys[j])] = [meters, seconds]
+                        cache[_pair_key(okeys[i], dkeys[j])] = [meters, seconds]
                 if persist:
                     save_cache(cache)
     else:
-        print(f"All {n * (n - 1)} drive-time pairs answered from the cache")
+        print(f"All {len(pairs)} drive-time pairs answered from the cache")
 
-    meters = [[0] * n for _ in range(n)]
-    seconds = [[0] * n for _ in range(n)]
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                m, s = cache[_pair_key(keys[i], keys[j])]
-                meters[i][j], seconds[i][j] = round(m), round(s)
+    meters = [[0] * len(destinations) for _ in origins]
+    seconds = [[0] * len(destinations) for _ in origins]
+    for i, j in pairs:
+        m, s = cache[_pair_key(okeys[i], dkeys[j])]
+        meters[i][j], seconds[i][j] = round(m), round(s)
     return meters, seconds
+
+
+def drive_matrix(
+    points: list[tuple[float, float]], *, cache: dict | None = None, persist: bool = True
+) -> tuple[list[list[int]], list[list[int]]]:
+    # Returns (meters, seconds), each points x points: every pair of dispatch places.
+    return drive_table(points, points, cache=cache, persist=persist)
