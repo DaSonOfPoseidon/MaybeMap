@@ -39,7 +39,7 @@ two are rebuilt by the build. Deleting `cache/` is safe; the next build just tak
 |---|---|
 | `serviced_cities.csv` | The MBS cities query: `City, State, County, Region, Latitude, Longitude, Customers, Residential Customers, Business Customers, Service Mix, Active Addresses, Tasks 6 Mo`. One row per town. An `.xlsx` works too; point `CITY_DATA_PATH` at it. |
 | `MO_Zones.kmz` | The zone polygons, exported from ArcGIS. Colors come from the KML styles. |
-| `tech_info.csv` | The MBS techs query: `Tech, Town, State, Active, Tech ID, Primary Region, Departments`. Town may be blank (see below). Rows with `Active` = N are skipped. A plain `Tech, Town, State` roster also works. |
+| `tech_info.csv` | The MBS techs query: `Tech, Town, State, Active, Tech ID, Primary Region, Departments`. Town may be blank (see below), but a Town needs its State: a Town with no State stops the build and names the row. Rows with `Active` = N are skipped. A plain `Tech, Town, State` roster also works. |
 | `dispatch_staging.csv` | `Type, Town, State`: one row per staging site. Each Type becomes its own switch. |
 
 Column names are matched case-insensitively. The roster CSVs are optional; without them
