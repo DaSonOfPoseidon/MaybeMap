@@ -169,6 +169,16 @@ def test_search_results_are_labeled_by_town_only():
     assert index and "x.name" in index.group(0)
 
 
+def test_clicked_regions_draw_no_focus_box():
+    # Clicking a region drew a box around its path. Region paths can't take keyboard focus, so
+    # their focus ring goes (plain :focus). The map container keeps its ring for keyboard panning,
+    # so only its mouse focus is removed (:focus-visible), never a plain :focus
+    css = (page.WEB_DIR / "app.css").read_text(encoding="utf-8")
+    assert "path.leaflet-interactive:focus{outline:none}" in css
+    assert ".leaflet-container:focus:not(:focus-visible){outline:none}" in css
+    assert ".leaflet-container:focus{outline:none}" not in css
+
+
 def test_card_shows_the_closest_techs_for_every_town():
     # The section is built outside the dispatch-town branch, or a town with no region gets none
     source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
