@@ -1,4 +1,5 @@
-# The page's pure helpers (notes CSV, drive-to search), run under Node. Skipped without Node.
+# The page's pure helpers (notes CSV, drive-to search, closest techs), run under Node.
+# Skipped without Node.
 
 import json
 import re
@@ -12,7 +13,15 @@ from maybemap.page import WEB_DIR
 NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(NODE is None, reason="node is not installed")
 
-NAMES = ("FORMULA_LEAD", "guardFormula", "unguardFormula", "escapeCSV", "csvParse", "matchPlaces")
+NAMES = (
+    "FORMULA_LEAD",
+    "guardFormula",
+    "unguardFormula",
+    "escapeCSV",
+    "csvParse",
+    "matchPlaces",
+    "closestTechs",
+)
 
 
 def _helpers() -> str:
@@ -101,3 +110,47 @@ def test_match_places_gives_nothing_for_an_empty_query():
 
 def test_match_places_keeps_markup_in_a_name_as_data():
     assert _match("<b>") == ["Gamma <b>x</b>"]
+
+
+def _closest(rows, *extra):
+    args = ", ".join(json.dumps(a) for a in (rows, *extra))
+    return _run(f"closestTechs({args}).map(r => r.tech.name)")
+
+
+def _row(tech, s, m=0, here=False):
+    return {"tech": {"name": tech}, "s": s, "m": m, "here": here}
+
+
+def test_closest_techs_sorts_by_time_then_distance_then_name():
+    rows = [
+        _row("d", 900, 5),
+        _row("c", 600, 9),
+        _row("b", 600, 7),
+        _row("a2", 600, 7),
+        _row("a1", 600, 7),
+    ]
+    assert _closest(rows) == ["a1", "a2", "b"]
+
+
+def test_closest_techs_limits_to_n_and_defaults_to_three():
+    rows = [_row(c, i) for i, c in reversed(list(enumerate("abcde")))]
+    assert _closest(rows) == ["a", "b", "c"]
+    assert _closest(rows, 1) == ["a"]
+    assert _closest(rows, 10) == ["a", "b", "c", "d", "e"]
+
+
+def test_closest_techs_handles_fewer_than_n_and_none():
+    assert _closest([]) == []
+    assert _closest([_row("only", 5)]) == ["only"]
+
+
+def test_closest_techs_puts_a_tech_based_here_first_and_keeps_two_in_one_town():
+    rows = [_row("far", 3000, 40), _row("z", 0, 0, True), _row("a", 0, 0, True)]
+    assert _closest(rows) == ["a", "z", "far"]
+
+
+def test_closest_techs_does_not_change_its_input():
+    rows = [_row("b", 2), _row("a", 1)]
+    names = "r.map(x => x.tech.name)"
+    got = _run(f"(() => {{ const r = {json.dumps(rows)}; closestTechs(r); return {names}; }})()")
+    assert got == ["b", "a"]

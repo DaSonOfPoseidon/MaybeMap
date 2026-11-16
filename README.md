@@ -20,7 +20,7 @@ maybemap/                # the build
   config.py              # every path and setting
   sources/               # readers: KMZ zones, city export, dispatch roster
   geocoding.py           # Geoapify + OSM boundary lookups (cached)
-  routing.py             # OSRM drive-time matrix (cached)
+  routing.py             # OSRM drive-time matrix and tech-to-town table (cached)
   payload.py             # everything the page draws, as one JSON document
   page.py                # inlines payload + web/ into the single HTML file
   web/                   # the page: template.html, app.css, app.js (Leaflet 1.9.4)
@@ -72,8 +72,9 @@ switches. They are not separate views.
 - **Basemap**: Light gray, Satellite or Streets, with optional place names.
 
 Click any dot, outline or pin to open its card. The card shows customer detail, region and
-zone, the 3 closest dispatch towns and 2 nearest techs by drive time, a search for the
-drive time to any other dispatch town, Google Maps links, and **notes**. Notes are saved in that browser only; use **Export notes CSV** to back them
+zone, the **3 closest techs** (every town gets them, timed from each tech's home town), the
+3 closest dispatch towns by drive time, a search for the drive time to any other dispatch
+town, Google Maps links, and **notes**. Notes are saved in that browser only; use **Export notes CSV** to back them
 up or share them, and **Import** to load them elsewhere. Imports also accept the old
 dispatch map's `Market, Notes` export.
 
@@ -93,8 +94,9 @@ of where they start. A tech with neither a Town nor a known region can't be plac
 build names them, and so does the dispatch section of the page.
 
 The **Departments** buttons in the dispatch section choose which techs count. Tech pins,
-labels and "nearest tech" results only consider techs in a selected department, so with
-only TC on, "nearest tech" means the nearest TC tech.
+labels, "nearest tech" route lines and each card's "3 closest techs" only consider techs in
+a selected department, so with only TC on, they are the closest TC techs. The roster has no
+street address, so a tech starts from their home town (or their region's hub).
 
 ## Drive times
 
@@ -102,7 +104,11 @@ Drive times come from OSRM's public `table` service, using the fastest route bet
 centers with no live traffic. They are fetched **at build time** and cached per pair in
 `cache/osrm_matrix.json`. A rebuild with the same towns makes no requests. A new town
 only needs its own row and column fetched, sent in blocks of up to 50 places
-(`OSRM_CHUNK`), so with around 90 towns that comes to about three requests. If OSRM cannot answer, the build stops
+(`OSRM_CHUNK`), so with around 90 towns that comes to about three requests. The cards' "3
+closest techs" need one more table: from each tech's home town to every town outside the
+dispatch set (dispatch towns already have theirs in the matrix). It is fetched and cached
+the same way, so the first build after upgrading makes a one-time batch of requests, and a
+new tech town only needs its own row. If OSRM cannot answer, the build stops
 rather than write a map with missing drive times.
 
 The route lines are straight connectors. They are not road shapes.
