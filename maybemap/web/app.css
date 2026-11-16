@@ -96,6 +96,8 @@ path.leaflet-interactive:focus{outline:none}
 .more{grid-column:1/-1;font-size:11px;color:#607889;padding:2px}
 
 .selected-section{background:linear-gradient(180deg,#eaf3fa 0%,#fafcfe 100%)}
+#driveToSection .eyebrow{display:block}
+#driveToResult .driveto-result:first-child{margin-top:2px}
 .selected-head{display:flex;justify-content:space-between;align-items:baseline}
 .linkbtn{background:none;border:0;color:#126b9c;font-size:12px;font-weight:700;padding:0}
 .card-title{font-size:18px;font-weight:800;color:#123c55;margin:0}

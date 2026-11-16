@@ -76,8 +76,9 @@ switches. They are not separate views.
 
 Click any dot, outline or pin to open its card. The card shows customer detail, region and
 zone, the **3 closest techs** (every town gets them, timed from each tech's home town), the
-3 closest dispatch towns by drive time, a search for the drive time to any other dispatch
-town, Google Maps links, and **notes**. Notes are saved in that browser only; use **Export notes CSV** to back them
+3 closest dispatch towns by drive time, Google Maps links, and **notes**. For a dispatch town, a
+**Drive time to…** search sits right under the town search, above the card, for the drive time to
+any other dispatch town. Notes are saved in that browser only; use **Export notes CSV** to back them
 up or share them, and **Import** to load them elsewhere. Imports also accept the old
 dispatch map's `Market, Notes` export.
 
