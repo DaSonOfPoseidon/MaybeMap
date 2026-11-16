@@ -1,6 +1,6 @@
 /* Brand colors (--brand-dark, --brand, --brand-2, --accent) and fonts come from the build's branding
    block above. These are the neutrals and the map's own data colors */
-:root{--ink:#1d2433;--muted:#5d6676;--line:#e3e6ec;--panel:#fff;--hover:#f3f4f8;--field:#c9ced8;--orange:#f3a331;--teal:#0bb1c6;--bar:56px;--side:340px;
+:root{color-scheme:light;--ink:#1d2433;--muted:#5d6676;--line:#e3e6ec;--panel:#fff;--hover:#f3f4f8;--field:#c9ced8;--orange:#f3a331;--teal:#0bb1c6;--bar:56px;--side:340px;
   --surface:#fff;--pop:#fff;--map-bg:#dfe3e8;--scroll:#c3c8d2;--switch-off:#c3c8d2;--knob-on:#fff;--shadow:#0000000f;--sw-edge:transparent;
   --heading:var(--brand-dark);--brand-ui:var(--brand);--link:#0078a8;--ctl-hover:#f4f4f4;--attr-bg:#fffc;
   --tech-ink:#9b5600;--tech-bg:#fdebd0;
@@ -8,6 +8,76 @@
   --market-tip-bg:#eafafff5;--market-tip-ink:#12334b;--market-tip-name:#116995;
   --edge-tip-bg:#fffffff5;--edge-tip-ink:#133c56;--edge-tip-line:#8eb4c9;
   --head-font:MapHeading,"Arial Narrow",system-ui,sans-serif;--body-font:MapBody,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+/* Dark theme: the same tokens with dark values, in two blocks with one body. The first follows the system
+   unless the viewer forced light; the second is the viewer's forced dark. Brand colors are never hardcoded
+   here: --heading and --brand-ui keep the brand's hue and chroma and only lift its lightness to stay readable
+   on the dark panel (a color already lighter than the floor passes through unchanged) */
+@media (prefers-color-scheme: dark){
+:root:not([data-theme="light"]){
+  color-scheme:dark;
+  --ink:#e4e8f0;
+  --muted:#9ba4b6;
+  --line:#2c3342;
+  --panel:#171c26;
+  --hover:#212836;
+  --field:#3a4357;
+  --surface:#0f131b;
+  --pop:#232a38;
+  --map-bg:#23272e;
+  --scroll:#3f485b;
+  --switch-off:#465064;
+  --knob-on:var(--panel);
+  --shadow:#00000066;
+  --sw-edge:#ffffff40;
+  --heading:oklch(from var(--brand-dark) max(l,.85) c h);
+  --brand-ui:oklch(from var(--brand) max(l,.72) c h);
+  --link:#6cb8d9;
+  --ctl-hover:#232a38;
+  --attr-bg:#171c26cc;
+  --tech-ink:#f0a94a;
+  --tech-bg:#3a2a12;
+  --tech-tip-bg:#2a2418f5;
+  --tech-tip-ink:#fde7c2;
+  --tech-tip-sub:#d1b88c;
+  --market-tip-bg:#10282ef5;
+  --market-tip-ink:#cdeef7;
+  --market-tip-name:#7cc8ea;
+  --edge-tip-bg:#1d2531f5;
+  --edge-tip-ink:#cfe3f1;
+  --edge-tip-line:#4d6477}
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ink:#e4e8f0;
+  --muted:#9ba4b6;
+  --line:#2c3342;
+  --panel:#171c26;
+  --hover:#212836;
+  --field:#3a4357;
+  --surface:#0f131b;
+  --pop:#232a38;
+  --map-bg:#23272e;
+  --scroll:#3f485b;
+  --switch-off:#465064;
+  --knob-on:var(--panel);
+  --shadow:#00000066;
+  --sw-edge:#ffffff40;
+  --heading:oklch(from var(--brand-dark) max(l,.85) c h);
+  --brand-ui:oklch(from var(--brand) max(l,.72) c h);
+  --link:#6cb8d9;
+  --ctl-hover:#232a38;
+  --attr-bg:#171c26cc;
+  --tech-ink:#f0a94a;
+  --tech-bg:#3a2a12;
+  --tech-tip-bg:#2a2418f5;
+  --tech-tip-ink:#fde7c2;
+  --tech-tip-sub:#d1b88c;
+  --market-tip-bg:#10282ef5;
+  --market-tip-ink:#cdeef7;
+  --market-tip-name:#7cc8ea;
+  --edge-tip-bg:#1d2531f5;
+  --edge-tip-ink:#cfe3f1;
+  --edge-tip-line:#4d6477}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;font:14px/1.4 var(--body-font);color:var(--ink);background:var(--map-bg)}
 button,select,input,textarea{font:inherit}
@@ -198,7 +268,12 @@ textarea{width:100%;border:1px solid var(--field);border-radius:4px;background:v
 .sidebar-foot{position:sticky;z-index:2;bottom:0;margin-top:auto;background:var(--panel);border-top:1px solid var(--line);box-shadow:0 -2px 6px var(--shadow);padding:9px 16px 7px}
 .legend{font-size:12px;color:var(--ink);display:flex;flex-wrap:wrap;gap:5px 14px;margin-bottom:6px}
 .legend:empty{display:none}
+.foot-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .updated{font-size:10px;color:var(--muted)}
+.theme-toggle{flex:none;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;margin:-4px -4px -4px 0;padding:0;border:0;border-radius:4px;background:transparent;color:var(--muted);cursor:pointer}
+.theme-toggle:hover{background:var(--hover);color:var(--ink)}
+.theme-toggle svg{display:none}
+.theme-toggle[data-mode="auto"] .i-auto,.theme-toggle[data-mode="light"] .i-light,.theme-toggle[data-mode="dark"] .i-dark{display:block}
 .legend span{display:inline-flex;align-items:center;gap:5px}
 .legend .legend-head{font-weight:600}
 .legend .sw{width:12px;height:12px;border-radius:3px;display:inline-block;flex:none;box-shadow:inset 0 0 0 1px var(--sw-edge)}

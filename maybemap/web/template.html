@@ -5,6 +5,11 @@
 <title>__TITLE__</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+<script>
+// Applies the viewer's forced theme before the first paint, so a forced dark page never flashes light.
+// Auto sets nothing: the stylesheet follows the system. app.js owns the toggle after this
+try{var t=JSON.parse(localStorage.getItem('maybemap_theme_v1'));if(t==='dark'||t==='light')document.documentElement.dataset.theme=t}catch(e){}
+</script>
 <style>
 /*__BRAND__*/
 /*__CSS__*/
@@ -152,7 +157,7 @@
     </div>
     <div class="section-body" id="basemapBody">
       <div class="seg seg3" id="basemapButtons">
-        <button type="button" data-value="gray">Light gray</button>
+        <button type="button" data-value="gray">Gray</button>
         <button type="button" data-value="satellite">Satellite</button>
         <button type="button" data-value="streets">Streets</button>
       </div>
@@ -177,7 +182,14 @@
 
   <footer class="sidebar-foot">
     <div class="legend" id="legend"></div>
-    <div class="updated" id="updated"></div>
+    <div class="foot-row">
+      <div class="updated" id="updated"></div>
+      <button type="button" class="theme-toggle" id="themeToggle" data-mode="auto" aria-label="Theme: Auto" title="Theme: Auto">
+        <svg class="i-auto" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>
+        <svg class="i-light" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <svg class="i-dark" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
   </footer>
 </aside>
 

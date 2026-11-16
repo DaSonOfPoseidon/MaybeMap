@@ -74,7 +74,7 @@ switches. They are not separate views.
   still lists them). Route lines can show each town's closest towns, its nearest tech, or
   the selected town's three closest, all labeled with road miles and drive time.
 - **Staging sites**: badges on the staging towns, one switch per type.
-- **Basemap**: Light gray, Satellite or Streets, with optional place names.
+- **Basemap**: Gray, Satellite or Streets, with optional place names. Gray turns dark with the page theme.
 
 In the town search, each result shows its state; Enter opens the first result and Escape clears the box.
 Click any dot, outline or pin to open its card. The card shows customer detail, region and
@@ -88,9 +88,11 @@ dispatch map's `Market, Notes` export.
 Layer settings are remembered per browser, so the map reopens the way it was left.
 Clicking the logo (a home icon when no logo is set) resets the map: every switch, filter and
 option goes back to its default, the open town and searches close, and the view returns to the
-zones. Notes and folded sections are kept.
+zones. Notes, folded sections and the theme are kept.
 
-The legend sits at the foot of the sidebar, with the map's build date under it.
+The legend sits at the foot of the sidebar, with the map's build date under it. The page follows the
+system's light or dark setting; the small button beside the build date cycles Auto, Dark and Light, and the
+choice is remembered per browser.
 
 Each section of the sidebar (except the town search and the selected-town cards) has a chevron
 beside its header that folds it down to the header, so the panel can be kept short. Folding
