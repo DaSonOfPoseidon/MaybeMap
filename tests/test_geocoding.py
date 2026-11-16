@@ -378,6 +378,34 @@ def test_a_failed_geocode_raises_and_is_never_cached(monkeypatch, answer):
     assert "Nowhere, Missouri" not in geocoding.GEOCODE_CACHE
 
 
+SECRET = "s3cr3t-key"
+LEAKY_URL = f"https://api.geoapify.com/v1/geocode/search?text=Nowhere&apiKey={SECRET}&limit=1"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        requests.HTTPError(f"503 Server Error: Service Unavailable for url: {LEAKY_URL}"),
+        requests.ConnectionError(f"Max retries exceeded with url: {LEAKY_URL}"),
+    ],
+    ids=["http", "network"],
+)
+def test_a_failed_geocode_never_prints_the_api_key(monkeypatch, error):
+    # requests puts the full URL, apiKey included, in its messages, and the build
+    # error lands in terminals, shared logs and CI output
+    def get(*args, **kwargs):
+        raise error
+
+    monkeypatch.setenv("GEOAPIFY_KEY", SECRET)
+    monkeypatch.setattr(geocoding.SESSION, "get", get)
+    monkeypatch.setattr(geocoding.time, "sleep", lambda s: None)
+    with pytest.raises(RuntimeError) as err:
+        geocoding.geocode_city_state("Nowhere", "MO")
+    assert SECRET not in str(err.value)
+    assert err.value.__cause__ is None and err.value.__context__ is None
+    assert "apiKey=<redacted>" in str(err.value)
+
+
 def test_an_empty_geocode_answer_is_cached_as_not_found(monkeypatch):
     monkeypatch.setenv("GEOAPIFY_KEY", "test")
     monkeypatch.setattr(geocoding.SESSION, "get", lambda *a, **k: _Response(200, {"features": []}))
@@ -515,3 +543,33 @@ def test_cached_hits_do_not_hide_a_run_of_fresh_misses(monkeypatch, tmp_path, se
     with pytest.raises(RuntimeError, match="3 cities in a row"):
         cities.load_city_boundaries(points)
     assert cached == []
+
+
+def test_importing_reads_no_cache_file():
+    # The caches load on first use, so importing the module (as every test does)
+    # never opens the developer's real cache/ files
+    import subprocess
+    import sys
+
+    probe = (
+        "import pathlib\n"
+        "seen = []\n"
+        "real = pathlib.Path.read_text\n"
+        "def spy(self, *a, **k):\n"
+        "    seen.append(str(self))\n"
+        "    return real(self, *a, **k)\n"
+        "pathlib.Path.read_text = spy\n"
+        "from maybemap import geocoding\n"
+        "from maybemap.config import CACHE_DIR\n"
+        "print([s for s in seen if s.startswith(str(CACHE_DIR))])\n"
+    )
+    out = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == "[]"
+
+
+def test_the_caches_load_on_first_use(monkeypatch, tmp_path):
+    path = tmp_path / "geocodes.json"
+    path.write_text('{"Somewhere, Missouri": {"lat": 1.0, "lon": 2.0}}', encoding="utf-8")
+    monkeypatch.setattr(geocoding, "GEOCODE_CACHE", None)
+    monkeypatch.setattr(geocoding, "GEOCODE_CACHE_PATH", path)
+    assert geocoding.geocode_city_state("Somewhere", "MO") == {"lat": 1.0, "lon": 2.0}
