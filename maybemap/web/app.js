@@ -434,8 +434,13 @@ function renderBasemap() {
 
 // ---------- Selection ----------
 const highlight = L.circleMarker([0, 0], { pane: 'highlight', radius: 14, color: '#ffcf3d', weight: 4, fill: false, interactive: false });
-function select(key, fly) {
+// fromSearch is true only for a click on a result in the main town search: that keeps the query
+// (so other results can be tried) and redraws the list so the picked row shows .active. Any other
+// way in (a pin, a region, a closest-town or tech row, the drive-time answer) empties the search
+function select(key, fly, fromSearch) {
   selectedKey = key;
+  if (!fromSearch) $('#townFilter').value = '';
+  renderDirectory();
   const t = townInfo(key);
   highlight.setLatLng([t.lat, t.lon]);
   if (!map.hasLayer(highlight)) highlight.addTo(map);
@@ -687,7 +692,7 @@ function renderDirectory() {
     btn.type = 'button';
     btn.append(el('i', 'dot' + (s.t.place && pinIsOrange(s.t.place) ? ' tech' : '')),
       el('span', '', s.t.name + (getNote(s.key) ? ' 📝' : '')));
-    btn.addEventListener('click', () => select(s.key, true));
+    btn.addEventListener('click', () => select(s.key, true, true));
     box.append(btn);
   }
   if (hits.length > 30) box.append(el('div', 'more', (hits.length - 30) + ' more · keep typing to narrow it down'));
