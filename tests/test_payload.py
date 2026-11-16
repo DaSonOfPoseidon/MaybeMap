@@ -3,6 +3,7 @@
 
 import json
 
+import pandas as pd
 import pytest
 
 from maybemap import config, geocoding, payload
@@ -51,13 +52,20 @@ def rosters(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def built(city_csv, seeded_cache, stub_city_boundaries, rosters, kmz_path):
+def hubs(tmp_path):
+    # No overrides by default: the path points at a file that does not exist
+    return tmp_path / "region_hubs.csv"
+
+
+@pytest.fixture
+def built(city_csv, seeded_cache, stub_city_boundaries, rosters, hubs, kmz_path):
     techs, staging = rosters
     return payload.build(
         city_path=city_csv,
         kmz_path=kmz_path,
         techs_path=techs,
         staging_path=staging,
+        hubs_path=hubs,
         matrix=fake_matrix,
         tech_table=fake_tech_table,
     )
@@ -133,7 +141,7 @@ def test_the_tech_table_is_asked_for_tech_places_then_outside_cities(built):
 
 
 def test_no_techs_leaves_empty_tech_places_and_rows(
-    city_csv, seeded_cache, stub_city_boundaries, rosters, kmz_path
+    city_csv, seeded_cache, stub_city_boundaries, rosters, hubs, kmz_path
 ):
     techs, staging = rosters
     techs.write_text("Tech,Town,State,Primary Region,Departments\n")
@@ -143,12 +151,31 @@ def test_no_techs_leaves_empty_tech_places_and_rows(
         kmz_path=kmz_path,
         techs_path=techs,
         staging_path=staging,
+        hubs_path=hubs,
         matrix=fake_matrix,
         tech_table=fake_tech_table,
     )
     assert out["dispatch"]["techPlaces"] == []
     assert out["dispatch"]["toCity"]["meters"] == []
     json.dumps(out, allow_nan=False)
+
+
+def test_the_region_hubs_file_overrides_the_default_hub(
+    city_csv, seeded_cache, stub_city_boundaries, rosters, hubs, kmz_path
+):
+    techs, staging = rosters
+    hubs.write_text("Region,Hub,State\nGroup 2: Central,Kansas City,MO\n")
+    out = payload.build(
+        city_path=city_csv,
+        kmz_path=kmz_path,
+        techs_path=techs,
+        staging_path=staging,
+        hubs_path=hubs,
+        matrix=fake_matrix,
+        tech_table=fake_tech_table,
+    )
+    eve = next(t for t in out["dispatch"]["techs"] if t["name"] == "Eve")
+    assert out["dispatch"]["places"][eve["place"]]["name"] == "Kansas City"
 
 
 def test_staging_points_at_dispatch_places(built):
@@ -162,7 +189,7 @@ def test_payload_is_strict_json(built):
 
 
 def test_staging_at_an_unknown_town_raises(
-    city_csv, seeded_cache, stub_city_boundaries, rosters, kmz_path
+    city_csv, seeded_cache, stub_city_boundaries, rosters, hubs, kmz_path
 ):
     techs, staging = rosters
     staging.write_text("Type,Town,State\nOutage,Nowhere,MO\n")
@@ -172,6 +199,7 @@ def test_staging_at_an_unknown_town_raises(
             kmz_path=kmz_path,
             techs_path=techs,
             staging_path=staging,
+            hubs_path=hubs,
             matrix=fake_matrix,
             tech_table=fake_tech_table,
         )
@@ -194,43 +222,172 @@ def test_techs_carry_their_basis_and_departments(built):
     assert built["departments"] == ["FIELD", "FIELDBUS", "TC"]
 
 
-def test_a_region_hub_is_its_most_central_town():
+def _town(i, name, region, customers, lat=38.0, lon=-93.0):
+    return {
+        "id": i,
+        "name": name,
+        "state": "MO",
+        "region": region,
+        "regioned": True,
+        "customers": customers,
+        "lat": lat,
+        "lon": lon,
+    }
+
+
+def _techs(*rows):
+    # (tech, town, state, region): the columns build_places reads
+    return pd.DataFrame(
+        [
+            {
+                "Tech": t,
+                "Town": town,
+                "State": state,
+                "TechId": "",
+                "Region": region,
+                "Departments": [],
+            }
+            for t, town, state, region in rows
+        ],
+        columns=["Tech", "Town", "State", "TechId", "Region", "Departments"],
+    )
+
+
+def _placed_at(roster, i=0):
+    return roster["places"][roster["techs"][i]["place"]]["name"]
+
+
+def test_a_region_hub_is_its_town_with_the_most_customers():
+    # Zz Middle is the most central by distance, but Zz East carries the customers
     towns = [
-        {
-            "id": 0,
-            "name": "West End",
-            "state": "MO",
-            "region": "R",
-            "regioned": True,
-            "lat": 38.0,
-            "lon": -94.0,
-        },
-        {
-            "id": 1,
-            "name": "Middle",
-            "state": "MO",
-            "region": "R",
-            "regioned": True,
-            "lat": 38.0,
-            "lon": -93.0,
-        },
-        {
-            "id": 2,
-            "name": "East End",
-            "state": "MO",
-            "region": "R",
-            "regioned": True,
-            "lat": 38.0,
-            "lon": -92.0,
-        },
-        {
-            "id": 3,
-            "name": "Elsewhere",
-            "state": "MO",
-            "region": "S",
-            "regioned": True,
-            "lat": 40.0,
-            "lon": -90.0,
-        },
+        _town(0, "Zz West", "R", 10, lon=-94.0),
+        _town(1, "Zz Middle", "R", 20, lon=-93.0),
+        _town(2, "Zz East", "R", 90, lon=-92.0),
+        _town(3, "Zz Elsewhere", "S", 5, lat=40.0, lon=-90.0),
     ]
-    assert payload.region_hubs(towns) == {"R": ("Middle", "MO"), "S": ("Elsewhere", "MO")}
+    found = payload.region_hubs(towns)
+    assert found.hubs == {"R": ("Zz East", "MO"), "S": ("Zz Elsewhere", "MO")}
+    assert found.defaulted == {"R", "S"} and found.unresolved == set()
+
+
+@pytest.mark.parametrize("order", [(0, 1), (1, 0)])
+def test_a_tie_goes_to_the_town_named_in_the_region(order):
+    # Zz Alpha sorts first, but the region is named for Zz Beta
+    region = "Zz Beta-Zz Gamma"
+    both = [_town(0, "Zz Alpha", region, 40), _town(1, "Zz Beta", region, 40)]
+    hubs = payload.region_hubs([both[i] for i in order]).hubs
+    assert hubs == {region: ("Zz Beta", "MO")}
+
+
+@pytest.mark.parametrize("order", [(0, 1), (1, 0)])
+def test_a_tie_with_no_name_in_the_region_goes_to_the_first_name(order):
+    both = [_town(0, "Zz Alpha", "Zz Region", 40), _town(1, "Zz Beta", "Zz Region", 40)]
+    hubs = payload.region_hubs([both[i] for i in order]).hubs
+    assert hubs == {"Zz Region": ("Zz Alpha", "MO")}
+
+
+def test_the_name_in_the_region_only_breaks_a_tie():
+    # Zz Beta is named in the region, but Zz Alpha has more customers
+    region = "Zz Beta-Zz Gamma"
+    towns = [_town(0, "Zz Alpha", region, 41), _town(1, "Zz Beta", region, 40)]
+    assert payload.region_hubs(towns).hubs == {region: ("Zz Alpha", "MO")}
+
+
+def test_an_override_wins_over_the_counts():
+    towns = [_town(0, "Zz Big", "R", 90), _town(1, "Zz Small", "R", 1)]
+    found = payload.region_hubs(towns, {"R": ("Zz Small", "MO")})
+    assert found.hubs == {"R": ("Zz Small", "MO")}
+    assert found.defaulted == set()
+
+
+def test_an_override_resolves_a_region_with_no_counts():
+    towns = [_town(0, "Zz One", "R", None), _town(1, "Zz Two", "R", None)]
+    found = payload.region_hubs(towns, {"R": ("Zz Two", "MO")})
+    assert found.hubs == {"R": ("Zz Two", "MO")} and found.unresolved == set()
+
+
+def test_a_town_with_no_count_is_skipped_but_zero_is_a_count():
+    towns = [
+        _town(0, "Zz Aaa", "R", None),
+        _town(1, "Zz Bbb", "R", 0),
+        _town(2, "Zz Ccc", "S", None),
+    ]
+    found = payload.region_hubs(towns)
+    assert found.hubs == {"R": ("Zz Bbb", "MO")}
+    assert found.unresolved == {"S"}
+
+
+def test_a_single_town_region_is_its_own_hub():
+    assert payload.region_hubs([_town(0, "Zz Only", "R", 3)]).hubs == {"R": ("Zz Only", "MO")}
+
+
+def test_towns_with_no_region_are_never_hubs():
+    town = _town(0, "Zz Loose", "Unassigned", 99)
+    town["regioned"] = False
+    found = payload.region_hubs([town])
+    assert found.hubs == {} and found.unresolved == set()
+
+
+def test_a_tech_with_no_town_is_placed_at_the_hub_and_the_default_is_printed(capsys):
+    towns = [_town(0, "Zz Small", "Zz R", 5), _town(1, "Zz Big", "Zz R", 50)]
+    roster = payload.build_places(towns, _techs(("Zz Tech", "", "", "Zz R")))
+    assert _placed_at(roster) == "Zz Big"
+    assert roster["techs"][0]["basis"] == "region"
+    out = capsys.readouterr().out
+    assert "Zz R" in out and "Zz Big" in out and "region_hubs.csv" in out
+
+
+def test_only_hubs_that_are_used_are_printed(capsys):
+    towns = [_town(0, "Zz One", "Zz R1", 5), _town(1, "Zz Two", "Zz R2", 50)]
+    payload.build_places(towns, _techs(("Zz Tech", "", "", "Zz R1")))
+    out = capsys.readouterr().out
+    assert "Zz R1" in out and "Zz R2" not in out
+
+
+def test_an_override_hub_is_not_reported_as_a_default(capsys):
+    towns = [_town(0, "Zz Small", "R", 5), _town(1, "Zz Big", "R", 50)]
+    overrides = {"R": ("Zz Small", "MO")}
+    roster = payload.build_places(towns, _techs(("Zz Tech", "", "", "R")), overrides)
+    assert _placed_at(roster) == "Zz Small"
+    assert "region_hubs.csv" not in capsys.readouterr().out
+
+
+def test_a_region_with_no_counts_raises_only_when_a_tech_needs_it():
+    dead = "Zz Dead Region"
+    towns = [_town(0, "Zz One", dead, None), _town(1, "Zz Two", "Zz Live", 4)]
+    ada = ("Zz Ada", "Zz Two", "MO", "Zz Live")
+    # No tech needs the dead region's hub, so the build goes on
+    assert len(payload.build_places(towns, _techs(ada))["techs"]) == 1
+    needs = _techs(ada, ("Zz Bo", "", "", dead))
+    with pytest.raises(ValueError, match=r"Zz Dead Region.*region_hubs\.csv"):
+        payload.build_places(towns, needs)
+    # An override row fixes it
+    roster = payload.build_places(towns, needs, {dead: ("Zz One", "MO")})
+    assert _placed_at(roster, 1) == "Zz One"
+
+
+def test_a_tech_with_a_town_does_not_need_its_regions_hub():
+    towns = [_town(0, "Zz One", "Zz Dead Region", None)]
+    roster = payload.build_places(towns, _techs(("Zz Ada", "Zz One", "MO", "Zz Dead Region")))
+    assert roster["techs"][0]["basis"] == "town"
+
+
+def test_a_comma_separated_region_uses_the_first_and_says_so(capsys):
+    towns = [_town(0, "Zz One", "Zz R1", 5), _town(1, "Zz Two", "Zz R2", 50)]
+    roster = payload.build_places(towns, _techs(("Zz Ada", "", "", "Zz R1, Zz R2")))
+    assert _placed_at(roster) == "Zz One"
+    assert roster["unplaced"] == []
+    line = next(x for x in capsys.readouterr().out.splitlines() if "Zz Ada" in x)
+    assert "Zz R1" in line and "Zz R2" not in line
+
+
+def test_a_comma_separated_region_whose_first_is_unknown_is_unplaced():
+    towns = [_town(0, "Zz One", "Zz R1", 5)]
+    roster = payload.build_places(towns, _techs(("Zz Ada", "", "", "Zz Nope, Zz R1")))
+    assert roster["unplaced"] == ["Zz Ada"]
+
+
+def test_a_region_whose_own_name_has_a_comma_matches_whole():
+    towns = [_town(0, "Zz One", "Zz R1, East", 5), _town(1, "Zz Two", "Zz R1", 50)]
+    roster = payload.build_places(towns, _techs(("Zz Ada", "", "", "Zz R1, East")))
+    assert _placed_at(roster) == "Zz One"

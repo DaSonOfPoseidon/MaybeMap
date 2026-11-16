@@ -1,9 +1,9 @@
 # Assembles everything the page draws into one JSON-serialisable dict. The page
 # itself holds no data of its own: every layer reads from this.
 
-import math
 from datetime import datetime
 from pathlib import Path
+from typing import NamedTuple
 
 import geopandas as gpd
 import pandas as pd
@@ -21,6 +21,7 @@ from maybemap.config import (
     KMZ_PATH,
     MAP_TITLE,
     OUTLINE_SIMPLIFY_M,
+    REGION_HUBS_PATH,
     REGION_PALETTE,
     SERVICE_TYPES,
     UNASSIGNED_GROUP_COLOR,
@@ -28,7 +29,7 @@ from maybemap.config import (
 )
 from maybemap.geocoding import geocode_city_state
 from maybemap.sources.cities import load_city_boundaries, load_city_points
-from maybemap.sources.dispatch import load_staging, load_techs
+from maybemap.sources.dispatch import load_region_hubs, load_staging, load_techs
 from maybemap.sources.kmz import load_kmz_zones
 
 # Per-town detail columns from the export, under the names the page reads
@@ -135,34 +136,62 @@ def build_outlines(boundaries: gpd.GeoDataFrame, cities: list[dict]) -> dict:
     return {"type": "FeatureCollection", "features": features}
 
 
-def _miles(a: dict, b: dict) -> float:
-    lat1, lon1, lat2, lon2 = map(math.radians, (a["lat"], a["lon"], b["lat"], b["lon"]))
-    h = (
-        math.sin((lat2 - lat1) / 2) ** 2
-        + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
-    )
-    return 7917.5 * math.asin(math.sqrt(h))
+class RegionHubs(NamedTuple):
+    hubs: dict[str, tuple[str, str]]  # region -> (town, state)
+    defaulted: set[str]  # regions whose hub came from the counts, not an override
+    unresolved: set[str]  # regions with no counted town and no override
 
 
-def region_hubs(cities: list[dict]) -> dict[str, tuple[str, str]]:
-    # Each region's most central town: the one with the least total straight-line
-    # distance to the region's other towns. Ties go to the name first in order.
+def region_hubs(
+    cities: list[dict], overrides: dict[str, tuple[str, str]] | None = None
+) -> RegionHubs:
+    # Each region's hub is its member town with the most customers. A town with no
+    # count is skipped. Ties go to a town whose name appears in the region's name,
+    # then to the name first in order. An override row wins over all of that. A
+    # region with no counted town and no override has no hub, and is reported apart.
+    overrides = overrides or {}
     by_region: dict[str, list[dict]] = {}
     for c in cities:
         if c["regioned"]:
             by_region.setdefault(c["region"], []).append(c)
-    hubs = {}
+    hubs = dict(overrides)
+    defaulted, unresolved = set(), set()
     for region, towns in by_region.items():
-        hub = min(towns, key=lambda t: (sum(_miles(t, o) for o in towns), t["name"]))
+        if region in overrides:
+            continue
+        counted = [t for t in towns if t.get("customers") is not None]
+        if not counted:
+            unresolved.add(region)
+            continue
+        top = max(t["customers"] for t in counted)
+        tied = [t for t in counted if t["customers"] == top]
+        named = [t for t in tied if t["name"].lower() in region.lower()]
+        hub = min(named or tied, key=lambda t: t["name"])
         hubs[region] = (hub["name"], hub["state"])
-    return hubs
+        defaulted.add(region)
+    return RegionHubs(hubs, defaulted, unresolved)
 
 
-def build_places(cities: list[dict], techs: pd.DataFrame) -> dict:
+def _hub_region(region: str, found: RegionHubs) -> str | None:
+    # The region a tech with no town is placed by. The whole Primary Region wins when
+    # it is a region (names can hold a comma); otherwise a list takes its first entry.
+    known = found.hubs.keys() | found.unresolved
+    if region in known:
+        return region
+    first = region.split(",")[0].strip()
+    return first if first in known else None
+
+
+def build_places(
+    cities: list[dict],
+    techs: pd.DataFrame,
+    overrides: dict[str, tuple[str, str]] | None = None,
+) -> dict:
     # The dispatch set: every regioned town, plus each tech's home town whether or
     # not it carries a region, since a tech nobody can route to is no use. A tech
-    # with no town is placed at the hub of their primary region instead; one with
-    # neither cannot be placed and is only listed.
+    # with no town is placed at the hub of their primary region instead (the first one
+    # listed, when there are several); one with neither cannot be placed and is only
+    # listed. A region with no possible hub stops the build only when such a tech needs it.
     places, index = [], {}
 
     def add(name, state, lat, lon, city_id):
@@ -176,13 +205,24 @@ def build_places(cities: list[dict], techs: pd.DataFrame) -> dict:
             add(c["name"], c["state"], c["lat"], c["lon"], c["id"])
 
     by_name = {(c["name"], c["state"]): c for c in cities}
-    hubs = region_hubs(cities)
+    found = region_hubs(cities, overrides)
     out, added, unplaced = [], [], []
+    hubs_used: dict[str, tuple[str, str]] = {}
     for row in techs.itertuples(index=False):
         if row.Town and row.State:
             key, basis = (row.Town, row.State), "town"
-        elif row.Region in hubs:
-            key, basis = hubs[row.Region], "region"
+        elif (region := _hub_region(row.Region, found)) is not None:
+            if region in found.unresolved:
+                raise ValueError(
+                    f"Tech {row.Tech} has no town, and region {region} has no town with a "
+                    f"customer count to be its hub. Add a row for it to "
+                    f"{REGION_HUBS_PATH.name}: Region,Hub,State."
+                )
+            key, basis = found.hubs[region], "region"
+            if region != row.Region:
+                print(f"Tech {row.Tech} lists several regions; placed by the first, {region}")
+            if region in found.defaulted:
+                hubs_used.setdefault(region, key)
         else:
             unplaced.append(row.Tech)
             continue
@@ -209,6 +249,11 @@ def build_places(cities: list[dict], techs: pd.DataFrame) -> dict:
                 "place": index[key],
                 "basis": basis,
             }
+        )
+    for region, (town, state) in hubs_used.items():
+        print(
+            f"Hub for region {region}: {town}, {state}, the town with the most customers. "
+            f"Add a row to {REGION_HUBS_PATH.name} to change it."
         )
     return {"places": places, "techs": out, "added": added, "unplaced": unplaced}
 
@@ -240,6 +285,7 @@ def build(
     kmz_path: Path | str = KMZ_PATH,
     techs_path: Path | str = DISPATCH_TECHS_PATH,
     staging_path: Path | str = DISPATCH_STAGING_PATH,
+    hubs_path: Path | str = REGION_HUBS_PATH,
     matrix=routing.drive_matrix,
     tech_table=routing.drive_table,
 ) -> dict:
@@ -252,7 +298,7 @@ def build(
     regioned = regioned.drop_duplicates(subset=["City", "State"])
     outlines = build_outlines(load_city_boundaries(regioned), cities)
 
-    roster = build_places(cities, load_techs(techs_path))
+    roster = build_places(cities, load_techs(techs_path), load_region_hubs(hubs_path))
     places = roster["places"]
     if roster["added"]:
         print(f"Added tech towns with no region to the dispatch set: {', '.join(roster['added'])}")

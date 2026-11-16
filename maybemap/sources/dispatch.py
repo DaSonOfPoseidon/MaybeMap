@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from maybemap.config import DISPATCH_STAGING_PATH, DISPATCH_TECHS_PATH
+from maybemap.config import DISPATCH_STAGING_PATH, DISPATCH_TECHS_PATH, REGION_HUBS_PATH
 from maybemap.states import state_abbrev
 
 # Optional tech columns from the MBS export, keyed by lower-cased header
@@ -18,7 +18,12 @@ TECH_OPTIONAL = {
 INACTIVE = {"n", "no", "false", "0", "inactive"}
 
 
-def _read(path: Path, required: list[str], optional: dict[str, str] | None = None):
+def _read(
+    path: Path,
+    required: list[str],
+    optional: dict[str, str] | None = None,
+    town: str = "Town",
+):
     df = pd.read_csv(path, dtype=str, encoding="utf-8-sig").fillna("")
     df.columns = [c.strip() for c in df.columns]
     lower = {c.lower(): c for c in df.columns}
@@ -37,19 +42,19 @@ def _read(path: Path, required: list[str], optional: dict[str, str] | None = Non
     for c in df.columns:
         df[c] = df[c].str.strip()
     # Same normal form as the city export, so a tech's town matches its city row
-    df["Town"] = df["Town"].str.title()
+    df[town] = df[town].str.title()
     df["State"] = df["State"].map(lambda s: state_abbrev(s) if s else "")
     return df.reset_index(drop=True)
 
 
-def _require_states(df: pd.DataFrame, label: str, path: Path):
+def _require_states(df: pd.DataFrame, label: str, path: Path, town: str = "Town"):
     # A town needs its state to be found. Without one the town would be quietly
     # ignored (a tech falls back to their region hub), so name the rows instead.
     # Runs on the rows that are kept, after blank and inactive ones are dropped.
-    no_state = (df["Town"] != "") & (df["State"] == "")
+    no_state = (df[town] != "") & (df["State"] == "")
     if no_state.any():
-        rows = ", ".join(f"{r[label]} ({r['Town']})" for _, r in df[no_state].iterrows())
-        raise ValueError(f"{path.name} has a Town with no State for: {rows}. Fill in the State.")
+        rows = ", ".join(f"{r[label]} ({r[town]})" for _, r in df[no_state].iterrows())
+        raise ValueError(f"{path.name} has a {town} with no State for: {rows}. Fill in the State.")
 
 
 TECH_COLUMNS = ["Tech", "Town", "State", "TechId", "Region", "Departments"]
@@ -88,3 +93,25 @@ def load_staging(path: Path | str = DISPATCH_STAGING_PATH) -> pd.DataFrame:
     _require_states(df, "Type", path)
     print(f"Loaded {len(df)} staging sites from {path.name}")
     return df
+
+
+def load_region_hubs(path: Path | str = REGION_HUBS_PATH) -> dict[str, tuple[str, str]]:
+    # Columns Region, Hub, State: the town that is a region's hub, whatever the
+    # customer counts say. A missing file means no overrides. A Region with no Hub, a
+    # Hub with no State, or one Region given two different hubs stops the build.
+    path = Path(path)
+    if not path.exists():
+        print(f"No {path.name} found; every region's hub comes from the customer counts")
+        return {}
+    df = _read(path, ["Region", "Hub", "State"], town="Hub")
+    df = df[(df["Region"] != "") | (df["Hub"] != "")]
+    blank = df[(df["Region"] == "") | (df["Hub"] == "")]
+    if not blank.empty:
+        raise ValueError(f"{path.name} has a row with no Region or no Hub. Fill in both.")
+    _require_states(df, "Region", path, town="Hub")
+    hubs: dict[str, tuple[str, str]] = {}
+    for row in df.itertuples(index=False):
+        if hubs.setdefault(row.Region, (row.Hub, row.State)) != (row.Hub, row.State):
+            raise ValueError(f"{path.name} gives region {row.Region} two different hubs.")
+    print(f"Loaded {len(hubs)} region hubs from {path.name}")
+    return hubs

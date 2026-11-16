@@ -13,10 +13,13 @@ OUTPUT_DIR = PROJECT_ROOT / "output"
 CITY_DATA_PATH = DATA_DIR / "serviced_cities.csv"
 KMZ_PATH = DATA_DIR / "MO_Zones.kmz"
 # The MBS techs query: Tech, Town, State, Active, Tech ID, Primary Region,
-# Departments. A tech with no Town is placed at their region's hub town.
+# Departments. A tech with no Town is placed at their region's hub town: the member
+# town with the most customers, unless REGION_HUBS_PATH names another.
 DISPATCH_TECHS_PATH = DATA_DIR / "tech_info.csv"
 # Type,Town,State -- one row per staging site, e.g. Generator,Warrensburg,MO
 DISPATCH_STAGING_PATH = DATA_DIR / "dispatch_staging.csv"
+# Optional. Region,Hub,State -- the hub town for a region, winning over the customer count
+REGION_HUBS_PATH = DATA_DIR / "region_hubs.csv"
 
 OUTPUT_PATH = OUTPUT_DIR / "maybe_map.html"
 MAP_TITLE = "Missouri Service Map"
