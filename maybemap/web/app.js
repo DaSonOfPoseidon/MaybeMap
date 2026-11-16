@@ -155,9 +155,10 @@ const BASEMAPS = {
     base: L.tileLayer(ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Imagery © Esri and contributors', maxZoom: 19 }),
     labels: L.tileLayer(ESRI + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { pane: 'basemapLabels', maxZoom: 19 }),
   },
-  // OSM bakes its place names into the tiles, so there is no overlay to switch
+  // Esri bakes its place names into the street tiles, so there is no overlay to switch.
+  // OSM's own tile server is not used: it 403s requests with no Referer (file:// maps).
   streets: {
-    base: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }),
+    base: L.tileLayer(ESRI + 'World_Street_Map/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles © Esri', maxZoom: 19 }),
     labels: null,
   },
 };
