@@ -79,3 +79,16 @@ that captured it.
 replaced, and it is not chained with `from exc` (the traceback would print the original).
 
 **Where:** the pre-push gate, filed as #5 (`geoapify_forward`).
+
+## A spy test that never sees the path it claims to cover
+
+`test_assets_are_read_and_written_as_utf8` spied on `Path.read_text` and `Path.write_text`
+and asserted every recorded call named utf-8. The page is written through `os.fdopen`,
+so the write spy recorded nothing, and `seen and all(...)` still passed with only the
+reads in it. A write in the wrong encoding would have gone unnoticed.
+
+**Check:** a test that records calls also asserts the calls it is about were recorded
+(by name, not just "something was"), and a path the spy cannot see is checked by its
+result instead (the bytes on disk).
+
+**Where:** issue #8, found by the pre-push gate.
