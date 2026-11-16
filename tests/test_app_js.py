@@ -411,8 +411,8 @@ def test_dot_radius_is_a_tier_per_customer_count_and_handles_missing_counts():
     # No count, an empty count, a negative one and NaN (JSON turns it into null) get the missing dot
     assert _run("[null, undefined, NaN, 0, -5].map(n => dotRadius(n))") == [missing] * 5
     # Every tier boundary: the last count of a tier and the first of the next
-    edges = _radii([1, 49, 50, 249, 250, 999, 1000, 9999, 10000])
-    assert edges == [4, 4, 6.5, 6.5, 9, 9, 12, 12, 16]
+    edges = _radii([1, 9, 10, 24, 25, 99, 100, 249, 250, 999, 1000, 26705])
+    assert edges == [4, 4, 6, 6, 8, 8, 10, 10, 12.5, 12.5, 16, 16]
     # Anything past the top tier stays in it, and a count between 0 and 1 still gets the first tier
     assert _radii([26705, 1e9]) == [16, 16]
     assert _radii([0.5]) == [4]
