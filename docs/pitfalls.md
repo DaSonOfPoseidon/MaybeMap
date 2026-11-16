@@ -44,3 +44,27 @@ callers branch on that sentinel, not on truthiness.
 
 **Where:** the pre-push gate on the combined-map branch (`get_cached_osm_polygon`, and
 the consecutive-miss abort in `load_city_boundaries`).
+
+## A filter that leaves the open card stale
+
+`update()` redraws the map layers and controls, but not the selected town's card. A
+control whose state feeds the card (the department filter decides its nearest
+technicians and greys out tech rows) left the card showing the old answer until the
+town was picked again.
+
+**Check:** for every new piece of `state`, list what reads it. If `renderCard()` or
+another panel outside `update()` reads it, the handler that changes it re-renders that
+panel too.
+
+**Where:** Codex on PR #11 (the department buttons).
+
+## Real roster data in a test fixture
+
+A fixture copied from the real tech export put technicians' names and Tech IDs into
+the public repo. A first name and an initial looks made up, but it is still a real
+person.
+
+**Check:** fixtures use invented names and IDs (`zz…` IDs). Before pushing a test that
+contains people, grep the gitignored `data/` exports for each name and ID it uses.
+
+**Where:** Codex on PR #11 (`tests/test_dispatch_sources.py`).

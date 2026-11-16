@@ -599,7 +599,8 @@ for (const d of D.departments) {
   btn.type = 'button';
   btn.dataset.value = d;
   btn.append(document.createTextNode(d), el('small', '', n + (n === 1 ? ' tech' : ' techs')));
-  btn.addEventListener('click', () => { state.depts[d] = !state.depts[d]; update(); });
+  // The open card's nearest technicians depend on the department filter too
+  btn.addEventListener('click', () => { state.depts[d] = !state.depts[d]; update(); renderCard(); });
   $('#deptButtons').append(btn);
 }
 if (!D.departments.length) $('#deptSection').hidden = true;
