@@ -29,6 +29,9 @@ NAMES = (
     "pinIsOrange",
     "directoryHits",
     "collapsedSet",
+    "DOT_TIERS",
+    "MISSING_DOT",
+    "dotRadius",
 )
 
 
@@ -391,3 +394,29 @@ def test_collapsed_set_drops_non_strings_and_unknown_ids():
 def test_collapsed_set_keeps_a_valid_id_once():
     assert _collapsed(["zonesSection", "zonesSection"]) == ["zonesSection"]
     assert _collapsed([]) == []
+
+
+def _radii(counts):
+    return _run(f"{json.dumps(counts)}.map(n => dotRadius(n))")
+
+
+def test_dot_radius_is_a_tier_per_customer_count_and_handles_missing_counts():
+    missing = _run("MISSING_DOT")
+    assert missing == 3.5
+    # No count, an empty count, a negative one and NaN (JSON turns it into null) get the missing dot
+    assert _run("[null, undefined, NaN, 0, -5].map(n => dotRadius(n))") == [missing] * 5
+    # Every tier boundary: the last count of a tier and the first of the next
+    edges = _radii([1, 49, 50, 249, 250, 999, 1000, 9999, 10000])
+    assert edges == [4, 4, 6.5, 6.5, 9, 9, 12, 12, 16]
+    # Anything past the top tier stays in it, and a count between 0 and 1 still gets the first tier
+    assert _radii([26705, 1e9]) == [16, 16]
+    assert _radii([0.5]) == [4]
+    # Growing with the count, every radius finite and above the missing dot
+    counts = [1, 10, 50, 100, 250, 500, 1000, 5000, 10000, 26705]
+    radii = _radii(counts)
+    assert radii == sorted(radii)
+    assert all(missing < r < 100 for r in radii)
+    # The tiers themselves are ascending, so the lookup keeps the highest one reached
+    tiers = _run("DOT_TIERS")
+    assert [t["lo"] for t in tiers] == sorted(t["lo"] for t in tiers)
+    assert [t["r"] for t in tiers] == sorted(t["r"] for t in tiers)

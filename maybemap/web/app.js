@@ -230,19 +230,44 @@ function renderOutlines() {
   }
 }
 
-const DOT_RADIUS = [5, 6, 7.5, 9];
+// Dot size comes from the town's customer count in tiers (radius in px), 10,000 and up being the largest.
+// These are the legend's rows too, and are separate from the customer-count filter buckets
+const DOT_TIERS = [
+  { lo: 1, r: 4 },
+  { lo: 50, r: 6.5 },
+  { lo: 250, r: 9 },
+  { lo: 1000, r: 12 },
+  { lo: 10000, r: 16 },
+];
+// A town with no count (or none) gets this dot, smaller than the first tier
+const MISSING_DOT = 3.5;
+function dotRadius(n) {
+  if (!Number.isFinite(n) || n <= 0) return MISSING_DOT;
+  let r = DOT_TIERS[0].r;
+  for (const t of DOT_TIERS) if (n >= t.lo) r = t.r;
+  return r;
+}
 const dotLayers = cities.map(c => {
-  const b = bucketIndex(c.customers);
   const m = L.circleMarker([c.lat, c.lon], {
-    pane: 'dots', radius: b >= 0 ? DOT_RADIUS[Math.min(b, DOT_RADIUS.length - 1)] : 4.5,
+    pane: 'dots', radius: dotRadius(c.customers),
     color: '#fff', weight: 1.2, fillColor: c.color, fillOpacity: 0.92,
   });
   m.bindTooltip(() => hoverTip(c), { className: 'hover-tip', direction: 'top', offset: [0, -6] });
   m.on('click', () => select(keyOf(c.name, c.state), false));
   return m;
 });
+// Big towns are drawn first so they never hide a small one on top of them; `cities` keeps its order
+// (ids are indexes), only this drawing order is sorted
+const dotOrder = cities.map((c, i) => i).sort((a, b) => (cities[b].customers || 0) - (cities[a].customers || 0));
 function renderDots() {
-  cities.forEach((c, i) => toggle(dotLayers[i], state.layers.dots && cityPasses(c)));
+  let added = false;
+  for (const i of dotOrder) {
+    const on = state.layers.dots && cityPasses(cities[i]);
+    if (on && !map.hasLayer(dotLayers[i])) added = true;
+    toggle(dotLayers[i], on);
+  }
+  // A dot added later lands on top of the others, so restack when one came back
+  if (added) for (const i of dotOrder) if (map.hasLayer(dotLayers[i])) dotLayers[i].bringToFront();
 }
 
 // ---------- Dispatch ----------
@@ -447,6 +472,8 @@ function select(key, fly, fromSearch) {
   renderDirectory();
   const t = townInfo(key);
   highlight.setLatLng([t.lat, t.lon]);
+  // The ring clears a big dot; a tech's home town with no dot keeps the plain ring
+  highlight.setRadius(t.city ? Math.max(14, dotRadius(t.city.customers) + 6) : 14);
   if (!map.hasLayer(highlight)) highlight.addTo(map);
   if (fly) map.flyTo([t.lat, t.lon], Math.max(map.getZoom(), 10), { duration: 0.5 });
   renderCard();
@@ -880,6 +907,16 @@ function renderLegend() {
   if (state.layers.zones) for (const f of D.zones.features) if (state.zonesOn[f.properties.label]) item('<i class="sw" style="background:' + f.properties.color + '"></i>', f.properties.label);
   if (state.layers.dots || state.layers.outlines) item('<i class="sw" style="background:linear-gradient(90deg,#1f77b4,#e6550d,#2ca02c)"></i>', 'Town colors = region');
   if (state.layers.dots) item('<i class="sw" style="background:#9e9e9e;border-radius:50%"></i>', 'No region');
+  if (state.layers.dots) {
+    // One row per size tier: a dot drawn at the radius the map uses (the swatch is a diameter in px) and
+    // its range. The labels are built from numbers and go in through a text node
+    box.append(el('span', 'legend-head', 'Customers'));
+    DOT_TIERS.forEach((t, i) => {
+      const next = DOT_TIERS[i + 1];
+      const label = next ? t.lo.toLocaleString() + '-' + (next.lo - 1).toLocaleString() : t.lo.toLocaleString() + '+';
+      item('<i class="sw" style="background:#9e9e9e;border-radius:50%;width:' + t.r * 2 + 'px;height:' + t.r * 2 + 'px"></i>', label);
+    });
+  }
   if (state.layers.dispatch) {
     item('<i class="dot tech"></i>', 'Tech home outside the service area');
     item('<i class="dot"></i>', 'Dispatch town');

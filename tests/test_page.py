@@ -537,3 +537,19 @@ def test_reset_restores_defaults_and_keeps_the_viewers_own_data():
     for key in ("NOTES_KEY", "COLLAPSE_KEY", "notes", "setCollapsed"):
         assert key not in body, key
     assert "$('#resetMap').addEventListener('click', resetMap);" in source
+
+
+def test_dots_are_sized_by_customers_and_the_legend_lists_the_tiers():
+    # The old four-step bucket radius is gone; the radius comes from dotRadius, the selection ring
+    # clears the town's own dot, and the legend lists the size tiers, built with a text node
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    assert "DOT_RADIUS" not in source
+    dots = re.search(r"^const dotLayers = .*?^\}\);$", source, re.M | re.S)
+    assert dots and "dotRadius(c.customers" in dots.group(0)
+    select = re.search(r"^function select\(.*?^\}$", source, re.M | re.S)
+    assert select and "highlight.setRadius(" in select.group(0)
+    assert "dotRadius(" in select.group(0)
+    legend = re.search(r"^function renderLegend\(\) \{.*?^\}$", source, re.M | re.S)
+    assert legend and "DOT_TIERS.forEach" in legend.group(0)
+    assert "Customers" in legend.group(0)
+    assert "createTextNode(text)" in legend.group(0)
