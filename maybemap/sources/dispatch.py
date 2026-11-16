@@ -39,14 +39,17 @@ def _read(path: Path, required: list[str], optional: dict[str, str] | None = Non
     # Same normal form as the city export, so a tech's town matches its city row
     df["Town"] = df["Town"].str.title()
     df["State"] = df["State"].map(lambda s: state_abbrev(s) if s else "")
+    return df.reset_index(drop=True)
+
+
+def _require_states(df: pd.DataFrame, label: str, path: Path):
     # A town needs its state to be found. Without one the town would be quietly
     # ignored (a tech falls back to their region hub), so name the rows instead.
-    label = required[0]
-    no_state = (df[label] != "") & (df["Town"] != "") & (df["State"] == "")
+    # Runs on the rows that are kept, after blank and inactive ones are dropped.
+    no_state = (df["Town"] != "") & (df["State"] == "")
     if no_state.any():
         rows = ", ".join(f"{r[label]} ({r['Town']})" for _, r in df[no_state].iterrows())
         raise ValueError(f"{path.name} has a Town with no State for: {rows}. Fill in the State.")
-    return df.reset_index(drop=True)
 
 
 TECH_COLUMNS = ["Tech", "Town", "State", "TechId", "Region", "Departments"]
@@ -66,6 +69,7 @@ def load_techs(path: Path | str = DISPATCH_TECHS_PATH) -> pd.DataFrame:
     if inactive.any():
         print(f"Skipping {int(inactive.sum())} inactive technicians")
     df = df[~inactive].copy()
+    _require_states(df, "Tech", path)
     df["Departments"] = df["Departments"].map(
         lambda v: [d.strip().upper() for d in v.split(",") if d.strip()]
     )
@@ -81,5 +85,6 @@ def load_staging(path: Path | str = DISPATCH_STAGING_PATH) -> pd.DataFrame:
         return pd.DataFrame(columns=["Type", "Town", "State"])
     df = _read(path, ["Type", "Town", "State"])
     df = df[(df["Type"] != "") & (df["Town"] != "")]
+    _require_states(df, "Type", path)
     print(f"Loaded {len(df)} staging sites from {path.name}")
     return df

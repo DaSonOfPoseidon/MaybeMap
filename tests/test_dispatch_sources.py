@@ -82,3 +82,10 @@ def test_a_town_with_no_state_is_named_not_dropped(tmp_path, load, header, row, 
     # is listed as having no town at all
     with pytest.raises(ValueError, match=f"{who}.*Clinton|{who}.*Nevada"):
         load(_csv(tmp_path, f"{header}\n{row}\n"))
+
+
+def test_an_inactive_tech_with_no_state_is_still_just_skipped(tmp_path):
+    df = load_techs(
+        _csv(tmp_path, "Tech,Town,State,Active\nPat Q,Clinton,,N\nSam R,Sedalia,MO,Y\n")
+    )
+    assert df["Tech"].tolist() == ["Sam R"]
