@@ -238,17 +238,17 @@ function renderOutlines() {
 }
 
 // Dot size comes from the town's customer count in tiers (radius in px), 1,000 and up being the largest.
-// These are the legend's rows too, and are separate from the customer-count filter buckets
+// These are separate from the customer-count filter buckets
 const DOT_TIERS = [
-  { lo: 1, r: 4 },
-  { lo: 10, r: 6 },
-  { lo: 25, r: 8 },
-  { lo: 100, r: 10 },
-  { lo: 250, r: 12.5 },
-  { lo: 1000, r: 16 },
+  { lo: 1, r: 3 },
+  { lo: 10, r: 4 },
+  { lo: 25, r: 5 },
+  { lo: 100, r: 6 },
+  { lo: 250, r: 7.5 },
+  { lo: 1000, r: 9 },
 ];
 // A town with no count (or none) gets this dot, smaller than the first tier
-const MISSING_DOT = 3.5;
+const MISSING_DOT = 2.5;
 function dotRadius(n) {
   if (!Number.isFinite(n) || n <= 0) return MISSING_DOT;
   let r = DOT_TIERS[0].r;
@@ -918,16 +918,6 @@ function renderLegend() {
   if (state.layers.zones) for (const f of D.zones.features) if (state.zonesOn[f.properties.label]) item('<i class="sw" style="background:' + f.properties.color + '"></i>', f.properties.label);
   if (state.layers.dots || state.layers.outlines) item('<i class="sw" style="background:linear-gradient(90deg,#1f77b4,#e6550d,#2ca02c)"></i>', 'Town colors = region');
   if (state.layers.dots) item('<i class="sw" style="background:#9e9e9e;border-radius:50%"></i>', 'No region');
-  if (state.layers.dots) {
-    // One row per size tier: a dot drawn at the radius the map uses (the swatch is a diameter in px) and
-    // its range. The labels are built from numbers and go in through a text node
-    box.append(el('span', 'legend-head', 'Customers'));
-    DOT_TIERS.forEach((t, i) => {
-      const next = DOT_TIERS[i + 1];
-      const label = next ? t.lo.toLocaleString() + '-' + (next.lo - 1).toLocaleString() : t.lo.toLocaleString() + '+';
-      item('<i class="sw" style="background:#9e9e9e;border-radius:50%;width:' + t.r * 2 + 'px;height:' + t.r * 2 + 'px"></i>', label);
-    });
-  }
   if (state.layers.dispatch) {
     item('<i class="dot tech"></i>', 'Tech home outside the service area');
     item('<i class="dot"></i>', 'Dispatch town');
