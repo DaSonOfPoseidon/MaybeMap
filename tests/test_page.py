@@ -241,3 +241,17 @@ def test_card_shows_the_closest_techs_for_every_town():
     assert "closestTechsSection" not in re.search(
         r"if \(t\.pi >= 0\) \{.*?\n  \}", card.group(0), re.S
     ).group(0)
+
+
+def test_basemap_tiles_come_only_from_esri():
+    # OSM's tile server 403s browser requests with no Referer (every file:// map), so
+    # no basemap may use it. Every tile layer must be built from the ESRI prefix, and
+    # the regex must find them, or the check passes on nothing.
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    assert "tile.openstreetmap.org" not in source
+    assert "ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/'" in source
+    urls = re.findall(r"L\.tileLayer\(\s*([^,]+?),", source)
+    assert len(urls) >= 5
+    for url in urls:
+        assert url.startswith("ESRI + '"), url
+    assert "ESRI + 'World_Street_Map/MapServer/tile/{z}/{y}/{x}'" in source
