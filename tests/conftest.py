@@ -118,7 +118,7 @@ def stub_city_boundaries(monkeypatch):
 
     fetched = []
 
-    def fetch(city, state, pt, progress="", county=""):
+    def fetch(city, state, pt, progress="", county="", use_overpass=True):
         fetched.append(city)
         return Point(-92.5, 38.9).buffer(0.05)
 

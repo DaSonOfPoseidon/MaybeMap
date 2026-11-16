@@ -233,7 +233,12 @@ def load_city_boundaries(gdf_points):
         if fetched:
             try:
                 geom_ll = fetch_osm_city_polygon(
-                    city, state, pt_lookup[(city, state)], progress, county=row.County
+                    city,
+                    state,
+                    pt_lookup[(city, state)],
+                    progress,
+                    county=row.County,
+                    use_overpass=not unavailable,
                 )
             except FallbackUnavailable as exc:
                 # Not a miss and not cached: a dot this build, asked again next time

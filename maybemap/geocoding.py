@@ -308,12 +308,24 @@ def _boundary_from_overpass(city: str, state: str, pt_3857):
 
 
 def fetch_osm_city_polygon(
-    city: str, state: str, pt_3857, progress_info: str = "", county: str = ""
+    city: str,
+    state: str,
+    pt_3857,
+    progress_info: str = "",
+    county: str = "",
+    *,
+    use_overpass: bool = True,
 ):
+    # use_overpass=False: Overpass already failed this build, and every further
+    # attempt would wait out its timeouts and retries again before failing
     print(f"Fetching OSM boundary: {city}, {state} {progress_info}")
 
     geom_ll = _boundary_from_nominatim(city, state, county)
     source = "Nominatim"
+    if geom_ll is None and not use_overpass:
+        raise FallbackUnavailable(
+            f"Overpass skipped for {city}, {state}: it was unreachable earlier this build"
+        )
     if geom_ll is None:
         # An Overpass outage raises out of here rather than becoming None: the
         # caller caches None as "no boundary", which would keep the town a dot
