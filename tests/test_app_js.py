@@ -32,6 +32,11 @@ NAMES = (
     "DOT_TIERS",
     "MISSING_DOT",
     "dotRadius",
+    "THEMES",
+    "themeFrom",
+    "nextTheme",
+    "effectiveTheme",
+    "basemapKey",
 )
 
 
@@ -420,3 +425,37 @@ def test_dot_radius_is_a_tier_per_customer_count_and_handles_missing_counts():
     tiers = _run("DOT_TIERS")
     assert [t["lo"] for t in tiers] == sorted(t["lo"] for t in tiers)
     assert [t["r"] for t in tiers] == sorted(t["r"] for t in tiers)
+
+
+def test_the_theme_cycles_auto_dark_light_and_wraps():
+    assert _run("['auto', 'dark', 'light'].map(nextTheme)") == ["dark", "light", "auto"]
+
+
+def test_a_saved_theme_outside_the_three_falls_back_to_auto():
+    values = [None, "", "Dark", "sepia", 3, {"a": 1}, ["dark"], True]
+    assert _run(f"{json.dumps(values)}.map(themeFrom)") == ["auto"] * len(values)
+    assert _run("['auto', 'dark', 'light'].map(themeFrom)") == ["auto", "dark", "light"]
+    # A bad saved value starts the cycle from auto, not from nowhere
+    assert _run("nextTheme('sepia')") == "dark"
+
+
+def test_auto_follows_the_system_and_a_forced_theme_ignores_it():
+    cases = [
+        ("auto", True, "dark"),
+        ("auto", False, "light"),
+        ("dark", False, "dark"),
+        ("light", True, "light"),
+        ("sepia", True, "dark"),
+    ]
+    for mode, system_dark, want in cases:
+        assert _run(f"effectiveTheme({json.dumps(mode)}, {json.dumps(system_dark)})") == want
+
+
+def test_only_gray_swaps_its_tiles_on_a_dark_page():
+    pairs = "[['gray', true], ['gray', false], ['satellite', true], ['streets', true]]"
+    assert _run(f"{pairs}.map(a => basemapKey(...a))") == [
+        "grayDark",
+        "gray",
+        "satellite",
+        "streets",
+    ]

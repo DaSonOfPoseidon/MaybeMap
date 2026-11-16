@@ -11,6 +11,8 @@ const $ = sel => document.querySelector(sel);
 const STATE_KEY = 'maybemap_state_v1';
 const NOTES_KEY = 'maybemap_notes_v1';
 const COLLAPSE_KEY = 'maybemap_collapsed_v1';
+// The viewer's theme choice. The head script in the template reads the same key before the first paint
+const THEME_KEY = 'maybemap_theme_v1';
 function readStore(key) { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) { return null; } }
 function writeStore(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { return false; } }
 
@@ -163,6 +165,11 @@ const BASEMAPS = {
   streets: {
     base: L.tileLayer(ESRI + 'World_Street_Map/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles © Esri', maxZoom: 19 }),
     labels: null,
+  },
+  // The Gray choice on a dark page. It is not a basemap choice of its own: basemapKey picks it for 'gray'
+  grayDark: {
+    base: L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles © Esri', maxNativeZoom: 16, maxZoom: 19 }),
+    labels: L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', { pane: 'basemapLabels', maxNativeZoom: 16, maxZoom: 19 }),
   },
 };
 
@@ -454,10 +461,13 @@ function renderStaging() {
 }
 
 // ---------- Basemap ----------
+// Only Gray has a dark set of tiles; Satellite and Streets look the same in both themes
+function basemapKey(choice, dark) { return choice === 'gray' && dark ? 'grayDark' : choice; }
 function renderBasemap() {
+  const active = basemapKey(state.basemap, effectiveTheme(themeMode, systemDark.matches) === 'dark');
   for (const [name, bm] of Object.entries(BASEMAPS)) {
-    toggle(bm.base, name === state.basemap);
-    if (bm.labels) toggle(bm.labels, name === state.basemap && state.placeLabels);
+    toggle(bm.base, name === active);
+    if (bm.labels) toggle(bm.labels, name === active && state.placeLabels);
   }
 }
 
@@ -1043,6 +1053,34 @@ function toggleCollapsed(section) {
 for (const id of collapsedSet(readStore(COLLAPSE_KEY), collapseSections.map(s => s.id))) setCollapsed($('#' + id), true);
 collapseSections.forEach(section => section.querySelector('.collapse-btn').addEventListener('click', () => toggleCollapsed(section)));
 
+// ---------- Theme ----------
+// Auto follows the system; Dark and Light force one. Stored text is untrusted, so only these three are accepted
+const THEMES = ['auto', 'dark', 'light'];
+function themeFrom(saved) { return THEMES.includes(saved) ? saved : 'auto'; }
+function nextTheme(mode) { return THEMES[(THEMES.indexOf(themeFrom(mode)) + 1) % THEMES.length]; }
+function effectiveTheme(mode, systemDark) { return themeFrom(mode) === 'auto' ? (systemDark ? 'dark' : 'light') : themeFrom(mode); }
+// The theme is a viewer preference like notes and the collapsed sections: it is not in DEFAULTS, so the
+// reset leaves it alone
+let themeMode = themeFrom(readStore(THEME_KEY));
+const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
+function applyTheme() {
+  if (themeMode === 'auto') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = themeMode;
+  const btn = $('#themeToggle');
+  const label = 'Theme: ' + themeMode[0].toUpperCase() + themeMode.slice(1);
+  btn.dataset.mode = themeMode;
+  btn.setAttribute('aria-label', label);
+  btn.title = label;
+  renderBasemap();
+}
+$('#themeToggle').addEventListener('click', () => {
+  themeMode = nextTheme(themeMode);
+  writeStore(THEME_KEY, themeMode);
+  applyTheme();
+});
+// In auto the system's own switch (an OS schedule, say) flips the page, so the gray tiles follow it
+if (systemDark.addEventListener) systemDark.addEventListener('change', renderBasemap);
+
 // ---------- Wiring ----------
 function update() {
   renderBasemap();
@@ -1071,4 +1109,5 @@ function resetMap() {
 $('#resetMap').addEventListener('click', resetMap);
 $('#title').textContent = D.title;
 $('#updated').textContent = 'Updated ' + D.builtAt;
+applyTheme();
 update();

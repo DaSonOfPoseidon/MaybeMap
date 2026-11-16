@@ -553,3 +553,123 @@ def test_dots_are_sized_by_customers_and_the_legend_lists_the_tiers():
     assert legend and "DOT_TIERS.forEach" in legend.group(0)
     assert "Customers" in legend.group(0)
     assert "createTextNode(text)" in legend.group(0)
+
+
+def _css_rule(css, selector):
+    # The declarations of the rule that starts a line with exactly this selector
+    match = re.search(r"^" + re.escape(selector) + r"\{([^}]*)\}", css, re.M)
+    assert match, selector
+    return match.group(1)
+
+
+SURFACE_RULES = (
+    "html,body",
+    "#map",
+    ".sidebar",
+    ".select",
+    ".seg button",
+    ".seg button.active",
+    "textarea",
+    ".action.secondary",
+    ".sidebar-foot",
+    ".leaflet-tooltip.techlabel",
+    ".leaflet-tooltip.marketlabel",
+    ".leaflet-tooltip.edge-label",
+    ".leaflet-tooltip.hover-tip",
+    ".legend .sw",
+)
+
+
+def test_surfaces_take_their_colors_from_tokens_not_light_literals():
+    # A surface that hardcodes white (or the map gray) stays light in dark mode. The data colors
+    # (pins, routes, zone and region palettes) are not in this list on purpose
+    css = (page.WEB_DIR / "app.css").read_text(encoding="utf-8")
+    for selector in SURFACE_RULES:
+        body = _css_rule(css, selector)
+        for value in re.findall(r"background(?:-color)?:([^;]*)", body):
+            assert not re.search(r"#fff(?:fff)?(?![0-9a-f])|\bwhite\b|#dfe3e8", value, re.I), (
+                selector,
+                value,
+            )
+    # The map gray lives in one token, and the tooltips and scrollbar in theirs
+    assert len(re.findall(r"#dfe3e8", css, re.I)) == 1
+    root = _css_rule(css, ":root")
+    for token in ("--surface", "--pop", "--map-bg", "--heading", "--brand-ui", "--tech-ink"):
+        assert token + ":" in root, token
+    assert "#c3c8d2" not in re.sub(r"--scroll:#c3c8d2|--switch-off:#c3c8d2", "", css)
+
+
+def _dark_blocks(css):
+    # The system-following block (in a media query) and the forced one
+    auto = re.search(
+        r"@media \(prefers-color-scheme: dark\)\{\s*"
+        r':root:not\(\[data-theme="light"\]\)\{([^}]*)\}\s*\}',
+        css,
+    )
+    forced = re.search(r':root\[data-theme="dark"\]\{([^}]*)\}', css)
+    assert auto and forced
+    return auto.group(1), forced.group(1)
+
+
+def test_both_dark_blocks_define_the_same_tokens_with_one_body():
+    css = (page.WEB_DIR / "app.css").read_text(encoding="utf-8")
+    auto, forced = _dark_blocks(css)
+    assert auto == forced
+    names = re.findall(r"(--?[a-z0-9-]+):", auto)
+    assert len(names) > 20 and len(names) == len(set(names))
+    assert "color-scheme" in re.findall(r"([a-z-]+):", auto)
+    # A dark token must exist in :root too, or the light theme would lack the property
+    root = _css_rule(css, ":root")
+    for name in names:
+        assert name + ":" in root, name
+
+
+def test_dark_brand_colors_are_derived_never_hardcoded():
+    css = (page.WEB_DIR / "app.css").read_text(encoding="utf-8")
+    auto, _ = _dark_blocks(css)
+    brand_ui = re.search(r"--brand-ui:([^;]*)", auto).group(1)
+    heading = re.search(r"--heading:([^;]*)", auto).group(1)
+    # Same hue and chroma as the brand variable, only the lightness is floored
+    assert re.fullmatch(r"oklch\(from var\(--brand\) max\(l,\.\d+\) c h\)", brand_ui), brand_ui
+    assert re.fullmatch(r"oklch\(from var\(--brand-dark\) max\(l,\.\d+\) c h\)", heading), heading
+    # The brand tokens here name no hex color, and the blocks never redefine the brand itself
+    assert "#" not in brand_ui + heading
+    assert "--brand:" not in auto and "--brand-dark:" not in auto
+
+
+def test_the_theme_toggle_lives_in_the_sidebar_footer_and_the_head_applies_it_early():
+    html = (page.WEB_DIR / "template.html").read_text(encoding="utf-8")
+    foot = html[html.index('<footer class="sidebar-foot"') : html.index("</footer>")]
+    assert '<button type="button" class="theme-toggle" id="themeToggle"' in foot
+    assert foot.index('id="updated"') < foot.index('id="themeToggle"')
+    # The icon button has a name and a title, and no visible text
+    button = re.search(r'<button[^>]*id="themeToggle"[^>]*>(.*?)</button>', foot, re.S)
+    assert 'aria-label="Theme: Auto"' in button.group(0)
+    assert 'title="Theme: Auto"' in button.group(0)
+    assert not re.sub(r"<svg.*?</svg>", "", button.group(1), flags=re.S).strip()
+    # An inline script in the head, before the stylesheet, sets data-theme from the same storage key
+    head = html[: html.index("</head>")]
+    early = re.search(
+        r"<script>(?:(?!</script>).)*maybemap_theme_v1(?:(?!</script>).)*</script>", head, re.S
+    )
+    assert early and head.index(early.group(0)) < head.index("<style>")
+    assert "documentElement.dataset.theme" in early.group(0) and "catch" in early.group(0)
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    assert "const THEME_KEY = 'maybemap_theme_v1';" in source
+
+
+def test_reset_keeps_the_theme_and_the_basemap_follows_it():
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    body = _js_function(source, "resetMap")
+    assert "THEME_KEY" not in body and "theme" not in body.lower()
+    defaults = re.search(r"^const DEFAULTS = \{.*?^\};$", source, re.M | re.S).group(0)
+    assert "theme" not in defaults.lower()
+    # The dark gray tiles are Esri's too; the toggle and the system switch both redraw the basemap
+    assert "ESRI + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'" in source
+    assert "ESRI + 'Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}'" in source
+    assert "renderBasemap();" in _js_function(source, "applyTheme")
+    assert "systemDark.addEventListener('change', renderBasemap)" in source
+    # A stored theme is only accepted from the three values
+    assert "themeFrom(readStore(THEME_KEY))" in source
+    html = (page.WEB_DIR / "template.html").read_text(encoding="utf-8")
+    assert 'data-value="gray">Gray<' in html
