@@ -447,7 +447,7 @@ def test_the_old_stats_strip_and_filler_copy_are_gone():
         "Town notes · Backup",
     ):
         assert gone not in html, gone
-    assert "$('#subtitle').textContent = 'Updated ' + D.builtAt;" in source
+    assert "$('#updated').textContent = 'Updated ' + D.builtAt;" in source
 
 
 def test_initial_fit_padding_leaves_room_on_a_landscape_phone():
@@ -463,3 +463,77 @@ def test_initial_fit_padding_leaves_room_on_a_landscape_phone():
         for key, y in re.findall(r"(padding\w*)\s*:\s*\[\s*\d+\s*,\s*(\d+)\s*\]", options):
             vertical += int(y) * (2 if key == "padding" else 1)
         assert vertical <= 60, options
+
+
+def _js_function(source, name):
+    # The body of a top-level `function name() { ... }`, up to the next top-level line
+    start = source.index("function " + name + "(")
+    end = source.index("\n}\n", start)
+    return source[start:end]
+
+
+def test_the_legend_and_update_stamp_are_the_sidebar_footer():
+    html = (page.WEB_DIR / "template.html").read_text(encoding="utf-8")
+    side, side_end = html.index('<aside class="sidebar"'), html.index("</aside>")
+    foot = html.index('<footer class="sidebar-foot"')
+    # The legend, then the small update stamp under it, after every section
+    order = [
+        html.index('id="notesSection"'),
+        foot,
+        html.index('id="legend"'),
+        html.index('id="updated"'),
+    ]
+    assert side < order[0] and order == sorted(order) and order[-1] < side_end
+    # The header keeps only the title
+    bar = html[html.index('<header class="appbar"') : html.index("</header>")]
+    assert "Updated" not in bar and 'id="updated"' not in bar and 'id="subtitle"' not in html
+    css = (page.WEB_DIR / "app.css").read_text(encoding="utf-8")
+    # The footer stays in view at the bottom of the sidebar while the sections scroll
+    rule = re.search(r"\.sidebar-foot\{([^}]*)\}", css).group(1)
+    assert "position:sticky" in rule and "bottom:0" in rule
+
+
+def test_the_sidebar_sits_on_the_right():
+    css = (page.WEB_DIR / "app.css").read_text(encoding="utf-8")
+    assert "#map{position:absolute;inset:var(--bar) var(--side) 0 0;" in css
+    rule = re.search(r"\.sidebar\{([^}]*)\}", css).group(1)
+    assert "right:0" in rule and "left:0" not in rule
+
+
+def test_the_title_is_centered_between_logo_and_presets():
+    html = (page.WEB_DIR / "template.html").read_text(encoding="utf-8")
+    bar = html[html.index('<header class="appbar"') : html.index("</header>")]
+    assert bar.index('id="resetMap"') < bar.index('id="title"') < bar.index('class="presets"')
+    css = (page.WEB_DIR / "app.css").read_text(encoding="utf-8")
+    rule = re.search(r"\.appbar\{([^}]*)\}", css).group(1)
+    assert "grid-template-columns:1fr auto 1fr" in rule
+    assert re.search(r"\.brand-text\{[^}]*text-align:center", css)
+
+
+def test_the_logo_is_the_reset_button():
+    html = (page.WEB_DIR / "template.html").read_text(encoding="utf-8")
+    button = re.search(r'<button[^>]*id="resetMap"[^>]*>(.*?)</button>', html, re.S)
+    assert button and 'class="brand-logo"' in button.group(1)
+    assert 'aria-label="Reset the map"' in button.group(0)
+    # Without a logo the button still has something to click
+    assert "home-icon" in button.group(1)
+    # A branded build shows the logo inside it
+    branded = page.render(PAYLOAD, BRANDED)
+    assert '<img class="brand-logo" src="data:image/png;base64,TE9HTw==" alt="">' in branded
+
+
+def test_reset_restores_defaults_and_keeps_the_viewers_own_data():
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    body = _js_function(source, "resetMap")
+    # Every saved setting goes back to its default, then the map redraws and saves that
+    assert "for (const k of Object.keys(DEFAULTS)) state[k] = structuredClone(DEFAULTS[k]);" in body
+    assert "update();" in body
+    # The open town, the destination and both searches close
+    for step in ("clearSelection();", "driveToKey = null;", "$('#townFilter').value = ''"):
+        assert step in body, step
+    assert "renderDirectory();" in body
+    assert "map.fitBounds(startBounds" in body
+    # Notes and collapsed sections belong to the viewer, not the map's settings
+    for key in ("NOTES_KEY", "COLLAPSE_KEY", "notes", "setCollapsed"):
+        assert key not in body, key
+    assert "$('#resetMap').addEventListener('click', resetMap);" in source

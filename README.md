@@ -85,6 +85,11 @@ up or share them, and **Import** to load them elsewhere. Imports also accept the
 dispatch map's `Market, Notes` export.
 
 Layer settings are remembered per browser, so the map reopens the way it was left.
+Clicking the logo (a home icon when no logo is set) resets the map: every switch, filter and
+option goes back to its default, the open town and searches close, and the view returns to the
+zones. Notes and folded sections are kept.
+
+The legend sits at the foot of the sidebar, with the map's build date under it.
 
 Each section of the sidebar (except the town search and the selected-town cards) has a chevron
 beside its header that folds it down to the header, so the panel can be kept short. Folding
