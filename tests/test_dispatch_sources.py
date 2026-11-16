@@ -67,3 +67,18 @@ def test_the_short_roster_still_works(tmp_path):
         [],
         "",
     )
+
+
+@pytest.mark.parametrize(
+    "load,header,row,who",
+    [
+        (load_techs, "Tech,Town,State", "Pat Q,Clinton,", "Pat Q"),
+        (load_staging, "Type,Town,State", "Outage,Nevada,", "Outage"),
+    ],
+    ids=["tech", "staging"],
+)
+def test_a_town_with_no_state_is_named_not_dropped(tmp_path, load, header, row, who):
+    # Otherwise the town is silently ignored: a tech lands at their region hub, or
+    # is listed as having no town at all
+    with pytest.raises(ValueError, match=f"{who}.*Clinton|{who}.*Nevada"):
+        load(_csv(tmp_path, f"{header}\n{row}\n"))

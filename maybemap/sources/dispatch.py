@@ -39,6 +39,13 @@ def _read(path: Path, required: list[str], optional: dict[str, str] | None = Non
     # Same normal form as the city export, so a tech's town matches its city row
     df["Town"] = df["Town"].str.title()
     df["State"] = df["State"].map(lambda s: state_abbrev(s) if s else "")
+    # A town needs its state to be found. Without one the town would be quietly
+    # ignored (a tech falls back to their region hub), so name the rows instead.
+    label = required[0]
+    no_state = (df[label] != "") & (df["Town"] != "") & (df["State"] == "")
+    if no_state.any():
+        rows = ", ".join(f"{r[label]} ({r['Town']})" for _, r in df[no_state].iterrows())
+        raise ValueError(f"{path.name} has a Town with no State for: {rows}. Fill in the State.")
     return df.reset_index(drop=True)
 
 
