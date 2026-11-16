@@ -4,6 +4,10 @@ html,body{height:100%;margin:0;font:14px/1.4 system-ui,-apple-system,Segoe UI,Ro
 button,select,input,textarea{font:inherit}
 button{cursor:pointer}
 button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #71c3f8;outline-offset:2px}
+/* Clicked regions: a region path takes no keyboard focus, so its focus box is only noise. The map
+   container keeps its ring for keyboard panning (:focus-visible), so only its mouse focus is hidden */
+path.leaflet-interactive:focus{outline:none}
+.leaflet-container:focus:not(:focus-visible){outline:none}
 [hidden]{display:none!important}
 
 #map{position:absolute;inset:0 392px 0 0;background:#cfdee5}
