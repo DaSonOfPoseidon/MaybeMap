@@ -149,14 +149,47 @@ def test_label_and_search_colors_follow_the_orange_pin_rule():
     assert "techs.length ? ' tech'" not in directory.group(0)
 
 
-def test_card_offers_a_drive_time_search_that_keeps_its_destination():
-    # The open card has the "Drive time to…" search, and a department change re-renders
-    # the card, so the destination must live outside the card (not be rebuilt from the DOM)
+def test_drive_time_destination_is_built_once_outside_the_card():
+    # The destination sits under the town search, not in the card. Its input is built once, so a
+    # department change (which re-renders the card) cannot wipe a half-typed search, and the
+    # chosen destination lives in a top-level variable that renderCard() only reads
     source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
-    assert "Drive time to…" in source
+    html = (page.WEB_DIR / "template.html").read_text(encoding="utf-8")
+    assert "Drive time to…" in html
     assert re.search(r"^let driveToKey\b", source, re.M)
     card = re.search(r"^function renderCard\(\) \{.*?^\}$", source, re.M | re.S)
-    assert card and "driveToSection(" in card.group(0)
+    assert card
+    assert "renderDriveTo(" in card.group(0)
+    assert "driveToSection(" not in card.group(0)
+    assert "driveToSearch" not in card.group(0)
+    draw = re.search(r"^function renderDriveTo\(\) \{.*?^\}$", source, re.M | re.S)
+    assert draw and "driveToSection(" not in draw.group(0)
+    # Selecting a town refreshes it through renderCard, clearing hides it
+    clear = re.search(r"^function clearSelection\(\) \{.*?^\}$", source, re.M | re.S)
+    assert clear and "renderDriveTo()" in clear.group(0)
+    # Its pick and clear handlers redraw only the destination, not the whole card
+    builder = re.search(r"^function driveToSection\(\) \{.*?^\}$", source, re.M | re.S)
+    assert builder and "renderCard()" not in builder.group(0)
+    assert "renderDriveTo()" in builder.group(0)
+    assert draw and "renderCard()" not in draw.group(0)
+
+
+def test_sidebar_order_is_search_then_destination_then_card_then_layers():
+    html = (page.WEB_DIR / "template.html").read_text(encoding="utf-8")
+    offsets = [
+        html.index(marker)
+        for marker in (
+            'id="stats"',
+            'id="searchSection"',
+            'id="driveToSection"',
+            'id="selectedSection"',
+            'data-layer="zones"',
+        )
+    ]
+    assert offsets == sorted(offsets)
+    assert html.count('id="driveToSection"') == 1
+    # The destination starts hidden, until a dispatch town is selected
+    assert re.search(r'<[^>]*id="driveToSection"[^>]*\bhidden\b', html)
 
 
 def test_search_results_are_labeled_by_town_only():

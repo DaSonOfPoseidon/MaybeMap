@@ -444,12 +444,17 @@ function select(key, fly) {
   if (state.routeMode === 'selected') renderRoutes();
   updateEdgeLabelVisibility();
   $('#selectedSection').hidden = false;
-  $('.sidebar').scrollTo({ top: 0, behavior: 'smooth' });
+  // On the phone's short bottom sheet the destination and the card header must stay in view: scroll to
+  // the first of them that is shown (its eyebrow names the town), not past the search results
+  const first = window.matchMedia('(max-width: 850px)').matches
+    ? [$('#driveToSection'), $('#selectedSection')].find(x => !x.hidden) : null;
+  $('.sidebar').scrollTo({ top: first ? first.offsetTop : 0, behavior: 'smooth' });
 }
 function clearSelection() {
   selectedKey = null;
   if (map.hasLayer(highlight)) map.removeLayer(highlight);
   $('#selectedSection').hidden = true;
+  renderDriveTo();
   renderPins();
   if (state.routeMode === 'selected') renderRoutes();
 }
@@ -522,21 +527,26 @@ function closestTechsSection(t) {
   });
   return wrap;
 }
-// "Drive time to…": a search over the dispatch towns, and the one answer picked from it
-function driveToSection(t) {
-  const wrap = el('div', 'driveto');
-  const label = el('label', 'field-label', 'Drive time to…');
-  label.htmlFor = 'driveToSearch';
-  label.style.display = 'block';
+// "Drive time to…": a search over the dispatch towns, and the one answer picked from it. It sits under
+// the town search, outside the card: built once here, and renderDriveTo() redraws only the answer, so a
+// department change (which re-renders the card) never wipes what is being typed
+let driveToFor = null;
+function driveToSection() {
+  const wrap = $('#driveTo');
   const input = el('input', 'select');
   input.id = 'driveToSearch';
   input.type = 'search';
   input.placeholder = 'Search dispatch towns';
   input.autocomplete = 'off';
   const list = el('div', 'suggest');
-  const pick = j => { driveToKey = keyOf(places[j].name, places[j].state); renderCard(); };
-  const hits = () => matchPlaces(places, input.value, t.pi);
-  // Typing redraws only this list: a full card render would drop the input's focus
+  list.id = 'driveToSuggest';
+  const pick = j => {
+    driveToKey = keyOf(places[j].name, places[j].state);
+    input.value = '';
+    list.replaceChildren();
+    renderDriveTo();
+  };
+  const hits = () => selectedKey ? matchPlaces(places, input.value, townInfo(selectedKey).pi) : [];
   input.addEventListener('input', () => {
     list.replaceChildren();
     for (const j of hits()) {
@@ -557,26 +567,40 @@ function driveToSection(t) {
       list.replaceChildren();
     }
   });
-  wrap.append(label, input, list);
-
-  const j = driveToKey !== null && placeIdxByKey.has(driveToKey) ? placeIdxByKey.get(driveToKey) : -1;
-  if (j >= 0) {
-    const result = el('div', 'driveto-result');
-    if (j === t.pi) {
-      result.append(el('p', 'route-note', 'Same town: ' + places[j].name + ', ' + places[j].state + '.'));
-    } else {
-      result.append(rowEntry('→', t, { j, m: D.dispatch.meters[t.pi][j], s: D.dispatch.seconds[t.pi][j] }));
-    }
-    const clear = el('button', 'clear', '✕');
-    clear.type = 'button';
-    clear.title = 'Clear this destination';
-    clear.setAttribute('aria-label', 'Clear the drive-time destination');
-    clear.addEventListener('click', () => { driveToKey = null; renderCard(); });
-    result.append(clear);
-    wrap.append(result);
-  }
-  return wrap;
+  const result = el('div');
+  result.id = 'driveToResult';
+  wrap.append(input, list, result);
 }
+function renderDriveTo() {
+  const section = $('#driveToSection');
+  const t = selectedKey ? townInfo(selectedKey) : null;
+  section.hidden = !(t && t.pi >= 0);
+  $('#driveToResult').replaceChildren();
+  // A different town (or none) starts with an empty search; the same town keeps what was typed
+  if (section.hidden || driveToFor !== selectedKey) {
+    $('#driveToSearch').value = '';
+    $('#driveToSuggest').replaceChildren();
+  }
+  driveToFor = section.hidden ? null : selectedKey;
+  if (section.hidden) return;
+  $('#driveToFrom').textContent = t.name + ', ' + t.state;
+  const j = driveToKey !== null && placeIdxByKey.has(driveToKey) ? placeIdxByKey.get(driveToKey) : -1;
+  if (j < 0) return;
+  const row = el('div', 'driveto-result');
+  if (j === t.pi) {
+    row.append(el('p', 'route-note', 'Same town: ' + places[j].name + ', ' + places[j].state + '.'));
+  } else {
+    row.append(rowEntry('→', t, { j, m: D.dispatch.meters[t.pi][j], s: D.dispatch.seconds[t.pi][j] }));
+  }
+  const clear = el('button', 'clear', '✕');
+  clear.type = 'button';
+  clear.title = 'Clear this destination';
+  clear.setAttribute('aria-label', 'Clear the drive-time destination');
+  clear.addEventListener('click', () => { driveToKey = null; renderDriveTo(); });
+  row.append(clear);
+  $('#driveToResult').append(row);
+}
+driveToSection();
 function renderCard() {
   const box = $('#selectedCard');
   box.replaceChildren();
@@ -617,9 +641,7 @@ function renderCard() {
   }
   const closest = closestTechsSection(t);
   if (closest) box.append(closest);
-  if (t.pi >= 0) {
-    box.append(driveToSection(t));
-  } else {
+  if (t.pi < 0) {
     box.append(el('p', 'route-note', 'Not a dispatch town, so no closest-towns list or drive-time search: only towns with a region, and tech bases, have those.'));
   }
 
@@ -643,6 +665,7 @@ function renderCard() {
     saveState.textContent = writeStore(NOTES_KEY, notes) ? 'Saved in this browser · Export CSV to share' : 'Browser storage unavailable · Export notes CSV to keep changes';
   });
   box.append(label, area, saveState);
+  renderDriveTo();
 }
 
 // ---------- Search ----------
