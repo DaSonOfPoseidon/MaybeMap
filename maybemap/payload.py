@@ -241,6 +241,7 @@ def build(
     techs_path: Path | str = DISPATCH_TECHS_PATH,
     staging_path: Path | str = DISPATCH_STAGING_PATH,
     matrix=routing.drive_matrix,
+    tech_table=routing.drive_table,
 ) -> dict:
     zones = load_kmz_zones(kmz_path)
     points, ordered_groups = load_city_points(city_path)
@@ -266,6 +267,16 @@ def build(
     staging = build_staging(load_staging(staging_path), places)
     meters, seconds = matrix([(p["lat"], p["lon"]) for p in places])
 
+    # Every card lists its closest techs by home town. A dispatch town already has its
+    # column in the matrix; the other towns need the drive time from each tech place.
+    tech_places = [i for i, p in enumerate(places) if p["techs"]]
+    in_dispatch = {p["city"] for p in places if p["city"] is not None}
+    outside = [c for c in cities if c["id"] not in in_dispatch]
+    to_meters, to_seconds = tech_table(
+        [(places[i]["lat"], places[i]["lon"]) for i in tech_places],
+        [(c["lat"], c["lon"]) for c in outside],
+    )
+
     print(
         f"Payload: {len(zones)} zones, {len(cities)} cities, {len(outlines['features'])} "
         f"outlines, {len(places)} dispatch places, {len(staging)} staging types"
@@ -290,6 +301,12 @@ def build(
             "unplaced": roster["unplaced"],
             "meters": meters,
             "seconds": seconds,
+            "techPlaces": tech_places,
+            "toCity": {
+                "ids": [c["id"] for c in outside],
+                "meters": to_meters,
+                "seconds": to_seconds,
+            },
         },
         "staging": staging,
     }

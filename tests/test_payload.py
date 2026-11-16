@@ -15,6 +15,21 @@ def fake_matrix(points):
     return meters, [[m // 10 for m in row] for row in meters]
 
 
+TABLE_CALLS = []
+
+
+def fake_tech_table(origins, destinations):
+    # Each cell encodes its origin and destination, so a swapped axis shows up
+    TABLE_CALLS.append((list(origins), list(destinations)))
+    meters = [[1000 * (i + 1) + j for j in range(len(destinations))] for i in range(len(origins))]
+    return meters, [[m // 10 for m in row] for row in meters]
+
+
+@pytest.fixture(autouse=True)
+def _clear_table_calls():
+    TABLE_CALLS.clear()
+
+
 @pytest.fixture
 def rosters(tmp_path, monkeypatch):
     # Joplin is in the export with no region; Seneca is not in the export at all
@@ -44,6 +59,7 @@ def built(city_csv, seeded_cache, stub_city_boundaries, rosters, kmz_path):
         techs_path=techs,
         staging_path=staging,
         matrix=fake_matrix,
+        tech_table=fake_tech_table,
     )
 
 
@@ -83,6 +99,58 @@ def test_matrix_matches_the_place_count(built):
     assert all(len(row) == n for row in built["dispatch"]["seconds"])
 
 
+def test_tech_places_are_the_places_that_hold_a_tech(built):
+    dispatch = built["dispatch"]
+    held = [i for i, p in enumerate(dispatch["places"]) if p["techs"]]
+    assert dispatch["techPlaces"] == held
+    names = {dispatch["places"][i]["name"] for i in held}
+    # Eve is placed at the Columbia hub, so it counts once; Fay is unplaced
+    assert names == {"Columbia", "Joplin", "Seneca"}
+
+
+def test_to_city_covers_exactly_the_cities_outside_the_dispatch_set(built):
+    dispatch, cities = built["dispatch"], built["cities"]
+    in_dispatch = {p["city"] for p in dispatch["places"] if p["city"] is not None}
+    outside = [c["id"] for c in cities if c["id"] not in in_dispatch]
+    to_city = dispatch["toCity"]
+    assert to_city["ids"] == outside
+    names = {cities[i]["name"] for i in outside}
+    assert names == {"Springfield", "Cape Girardeau"}
+    rows = len(dispatch["techPlaces"])
+    for key in ("meters", "seconds"):
+        assert len(to_city[key]) == rows
+        assert all(len(row) == len(outside) for row in to_city[key])
+
+
+def test_the_tech_table_is_asked_for_tech_places_then_outside_cities(built):
+    ((origins, destinations),) = TABLE_CALLS
+    dispatch, cities = built["dispatch"], built["cities"]
+    places = dispatch["places"]
+    assert origins == [(places[i]["lat"], places[i]["lon"]) for i in dispatch["techPlaces"]]
+    assert destinations == [(cities[i]["lat"], cities[i]["lon"]) for i in dispatch["toCity"]["ids"]]
+    # Rows are tech places and columns are cities, as the stub filled them in
+    assert dispatch["toCity"]["meters"][1][0] == 2000
+
+
+def test_no_techs_leaves_empty_tech_places_and_rows(
+    city_csv, seeded_cache, stub_city_boundaries, rosters, kmz_path
+):
+    techs, staging = rosters
+    techs.write_text("Tech,Town,State,Primary Region,Departments\n")
+    staging.write_text("Type,Town,State\n")
+    out = payload.build(
+        city_path=city_csv,
+        kmz_path=kmz_path,
+        techs_path=techs,
+        staging_path=staging,
+        matrix=fake_matrix,
+        tech_table=fake_tech_table,
+    )
+    assert out["dispatch"]["techPlaces"] == []
+    assert out["dispatch"]["toCity"]["meters"] == []
+    json.dumps(out, allow_nan=False)
+
+
 def test_staging_points_at_dispatch_places(built):
     names = [built["dispatch"]["places"][i]["name"] for i in built["staging"][0]["places"]]
     assert built["staging"][0]["type"] == "Generator"
@@ -105,6 +173,7 @@ def test_staging_at_an_unknown_town_raises(
             techs_path=techs,
             staging_path=staging,
             matrix=fake_matrix,
+            tech_table=fake_tech_table,
         )
 
 
