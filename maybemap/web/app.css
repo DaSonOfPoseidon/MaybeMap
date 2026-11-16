@@ -1,19 +1,25 @@
 /* Brand colors (--brand-dark, --brand, --brand-2, --accent) and fonts come from the build's branding
    block above. These are the neutrals and the map's own data colors */
 :root{--ink:#1d2433;--muted:#5d6676;--line:#e3e6ec;--panel:#fff;--hover:#f3f4f8;--field:#c9ced8;--orange:#f3a331;--teal:#0bb1c6;--bar:56px;--side:340px;
+  --surface:#fff;--pop:#fff;--map-bg:#dfe3e8;--scroll:#c3c8d2;--switch-off:#c3c8d2;--knob-on:#fff;--shadow:#0000000f;--sw-edge:transparent;
+  --heading:var(--brand-dark);--brand-ui:var(--brand);--link:#0078a8;--ctl-hover:#f4f4f4;--attr-bg:#fffc;
+  --tech-ink:#9b5600;--tech-bg:#fdebd0;
+  --tech-tip-bg:#fffef8f5;--tech-tip-ink:#14344b;--tech-tip-sub:#3f5769;
+  --market-tip-bg:#eafafff5;--market-tip-ink:#12334b;--market-tip-name:#116995;
+  --edge-tip-bg:#fffffff5;--edge-tip-ink:#133c56;--edge-tip-line:#8eb4c9;
   --head-font:MapHeading,"Arial Narrow",system-ui,sans-serif;--body-font:MapBody,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
 *{box-sizing:border-box}
-html,body{height:100%;margin:0;font:14px/1.4 var(--body-font);color:var(--ink);background:#dfe3e8}
+html,body{height:100%;margin:0;font:14px/1.4 var(--body-font);color:var(--ink);background:var(--map-bg)}
 button,select,input,textarea{font:inherit}
 button{cursor:pointer}
-button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--brand-ui);outline-offset:2px}
 /* Clicked regions: a region path takes no keyboard focus, so its focus box is only noise. The map
    container keeps its ring for keyboard panning (:focus-visible), so only its mouse focus is hidden */
 path.leaflet-interactive:focus{outline:none}
 .leaflet-container:focus:not(:focus-visible){outline:none}
 [hidden]{display:none!important}
 
-#map{position:absolute;inset:var(--bar) var(--side) 0 0;background:#dfe3e8}
+#map{position:absolute;inset:var(--bar) var(--side) 0 0;background:var(--map-bg)}
 
 /* Header bar: the logo (it resets the map) on the left, the title centered, and the presets that flip
    layer switches on the right. Equal outer columns keep the title on the page's center line */
@@ -35,17 +41,17 @@ path.leaflet-interactive:focus{outline:none}
 .presets button:focus-visible{outline-color:var(--accent)}
 
 /* Sidebar */
-.sidebar{position:absolute;z-index:1050;right:0;top:var(--bar);bottom:0;width:var(--side);display:flex;flex-direction:column;background:var(--panel);border-left:1px solid var(--line);overflow:auto;scrollbar-color:#c3c8d2 transparent}
+.sidebar{position:absolute;z-index:1050;right:0;top:var(--bar);bottom:0;width:var(--side);display:flex;flex-direction:column;background:var(--panel);border-left:1px solid var(--line);overflow:auto;scrollbar-color:var(--scroll) transparent}
 .section{padding:12px 16px;border-bottom:1px solid var(--line);position:relative}
-.section-title{display:block;margin:0 0 8px;font:700 17px/1.2 var(--head-font);color:var(--brand-dark);letter-spacing:.2px}
+.section-title{display:block;margin:0 0 8px;font:700 17px/1.2 var(--head-font);color:var(--heading);letter-spacing:.2px}
 .field-label{font-size:12px;font-weight:600;color:var(--muted);margin:12px 0 5px}
-.select{display:block;width:100%;border-radius:4px;padding:7px 9px;background:#fff;border:1px solid var(--field);color:var(--ink)}
+.select{display:block;width:100%;border-radius:4px;padding:7px 9px;background:var(--surface);border:1px solid var(--field);color:var(--ink)}
 .route-note{font-size:12px;color:var(--muted);margin:8px 0 0;line-height:1.4}
 .notehelp{color:var(--muted);font-size:12px;line-height:1.4;margin:0 0 10px}
 
 /* Layer sections: the header is the master switch, the body dims while off */
 .layer-head{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer}
-.layer-head b{display:block;font:700 17px/1.2 var(--head-font);color:var(--brand-dark);letter-spacing:.2px}
+.layer-head b{display:block;font:700 17px/1.2 var(--head-font);color:var(--heading);letter-spacing:.2px}
 .layer-head small{display:block;color:var(--muted);font-size:12px;margin-top:1px}
 .layer-body{margin-top:4px;transition:opacity .15s}
 .layer.off .layer-body{opacity:.45}
@@ -64,10 +70,10 @@ path.leaflet-interactive:focus{outline:none}
 .section.collapsed:not(.layer) > .section-head{margin-bottom:0}
 
 /* Switches: one pill switch for layer heads, label rows and swatch rows */
-.layer-head input,.label-toggle input,.swatch-toggle input{appearance:none;-webkit-appearance:none;position:relative;width:34px;height:20px;border-radius:20px;border:0;background:#c3c8d2;flex:none;margin:0;cursor:pointer;transition:background .15s}
+.layer-head input,.label-toggle input,.swatch-toggle input{appearance:none;-webkit-appearance:none;position:relative;width:34px;height:20px;border-radius:20px;border:0;background:var(--switch-off);flex:none;margin:0;cursor:pointer;transition:background .15s}
 .layer-head input:before,.label-toggle input:before,.swatch-toggle input:before{content:'';position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;top:2px;left:2px;box-shadow:0 1px 2px #0003;transition:transform .15s}
-.layer-head input:checked,.label-toggle input:checked,.swatch-toggle input:checked{background:var(--brand)}
-.layer-head input:checked:before,.label-toggle input:checked:before,.swatch-toggle input:checked:before{transform:translateX(14px)}
+.layer-head input:checked,.label-toggle input:checked,.swatch-toggle input:checked{background:var(--brand-ui)}
+.layer-head input:checked:before,.label-toggle input:checked:before,.swatch-toggle input:checked:before{transform:translateX(14px);background:var(--knob-on)}
 .layer-head input:disabled,.label-toggle input:disabled{opacity:.45;cursor:not-allowed}
 
 /* Flat rows: a switch row, and a swatch row for each zone, region and staging site */
@@ -84,18 +90,18 @@ path.leaflet-interactive:focus{outline:none}
 .region-list b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 .label-controls,.staging-controls{display:flex;gap:12px;margin-top:6px}
-.label-controls button,.staging-controls button{font-size:12px;padding:2px 0;border:0;background:none;font-weight:600;color:var(--brand)}
+.label-controls button,.staging-controls button{font-size:12px;padding:2px 0;border:0;background:none;font-weight:600;color:var(--brand-ui)}
 .label-controls button:hover,.staging-controls button:hover{text-decoration:underline}
 
 /* Segmented buttons: one joined group; multi-select ones mark each active button independently */
 .seg{display:grid;grid-template-columns:1fr 1fr}
 .seg.seg3{grid-template-columns:repeat(3,1fr)}
 .seg.seg4{grid-template-columns:repeat(4,1fr)}
-.seg button{padding:6px 4px;font-size:12px;font-weight:600;border:1px solid var(--field);margin:0 -1px -1px 0;color:var(--ink);background:#fff;border-radius:0;line-height:1.2}
+.seg button{padding:6px 4px;font-size:12px;font-weight:600;border:1px solid var(--field);margin:0 -1px -1px 0;color:var(--ink);background:var(--surface);border-radius:0;line-height:1.2}
 .seg button:hover{background:var(--hover)}
 .seg button small{display:block;font-weight:400;font-size:10px;color:var(--muted);margin-top:1px}
-.seg button.active{background:color-mix(in srgb,var(--brand) 13%,#fff);border-color:var(--brand);color:var(--brand-dark);position:relative;z-index:1}
-.seg button.active small{color:var(--brand)}
+.seg button.active{background:color-mix(in srgb,var(--brand-ui) 13%,var(--surface));border-color:var(--brand-ui);color:var(--heading);position:relative;z-index:1}
+.seg button.active small{color:var(--brand-ui)}
 .inline-field{display:flex;gap:8px;align-items:center;margin-top:10px}
 .inline-field label{color:var(--muted);font-size:12px;flex:1}
 .inline-field .select{width:110px;padding:5px}
@@ -112,25 +118,25 @@ path.leaflet-interactive:focus{outline:none}
 .more{grid-column:1/-1;font-size:11px;color:var(--muted);padding:4px}
 
 .close-card{position:absolute;top:14px;right:16px}
-.linkbtn{background:none;border:0;color:var(--brand);font-size:12px;font-weight:600;padding:0}
+.linkbtn{background:none;border:0;color:var(--brand-ui);font-size:12px;font-weight:600;padding:0}
 .linkbtn:hover{text-decoration:underline}
-.card-title{font:700 22px/1.15 var(--head-font);color:var(--brand-dark);margin:0;padding-right:48px}
+.card-title{font:700 22px/1.15 var(--head-font);color:var(--heading);margin:0;padding-right:48px}
 .card-sub{font-size:12px;color:var(--muted);margin:2px 0 8px}
-.card-sub .tech{color:#9b5600;font-weight:600}
+.card-sub .tech{color:var(--tech-ink);font-weight:600}
 .facts{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;margin:6px 0 4px}
 .fact{padding:5px 0;border-bottom:1px solid var(--line)}
 .fact b{display:block;font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums}
 .fact small{font-size:11px;color:var(--muted)}
 .rowentry{border:0;border-bottom:1px solid var(--line);background:none;padding:7px 4px;margin:0;display:flex;align-items:center;gap:8px;cursor:pointer;text-align:left;width:100%;color:var(--ink)}
 .rowentry:hover{background:var(--hover)}
-.rowentry .num{background:var(--hover);color:var(--brand-dark);width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;flex:0 0 20px}
-.rowentry .num.tech{background:#fdebd0;color:#9b5600}
+.rowentry .num{background:var(--hover);color:var(--heading);width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;flex:0 0 20px}
+.rowentry .num.tech{background:var(--tech-bg);color:var(--tech-ink)}
 .rowentry .detail{flex:1;min-width:0}
 .rowentry b{display:block;font-size:13px;font-weight:600}
 .rowentry small{color:var(--muted);font-size:11px}
 .rowentry .value{text-align:right;white-space:nowrap}
 .rowentry .value small{display:block}
-.rowentry a{color:var(--brand);text-decoration:none;font-size:10px}
+.rowentry a{color:var(--brand-ui);text-decoration:none;font-size:10px}
 .suggest{display:grid;margin-top:4px}
 .suggest:empty{display:none}
 .driveto-result{display:flex;align-items:center;gap:6px}
@@ -140,15 +146,15 @@ path.leaflet-interactive:focus{outline:none}
 .driveto-result .clear:hover{color:var(--ink)}
 .tech-list{display:grid;margin:2px 0 6px}
 .tech-row{border-bottom:1px solid var(--line);border-left:3px solid var(--orange);padding:5px 8px}
-.tech-row b{display:block;font-size:13px;font-weight:600;color:#9b5600}
+.tech-row b{display:block;font-size:13px;font-weight:600;color:var(--tech-ink)}
 .tech-row small{font-size:11px;color:var(--muted)}
 .tech-row.off{opacity:.5}
-textarea{width:100%;border:1px solid var(--field);border-radius:4px;background:#fff;padding:8px 9px;resize:vertical;min-height:84px;line-height:1.4;color:var(--ink)}
+textarea{width:100%;border:1px solid var(--field);border-radius:4px;background:var(--surface);padding:8px 9px;resize:vertical;min-height:84px;line-height:1.4;color:var(--ink)}
 .save-state{min-height:18px;color:var(--muted);font-size:11px;margin:4px 0 0}
 .btnrow{display:flex;gap:8px;flex-wrap:wrap}
-.action{background:var(--brand);color:#fff;border:1px solid var(--brand);padding:7px 12px;border-radius:4px;font-weight:600;font-size:12px;flex:1;text-align:center;text-decoration:none}
+.action{background:var(--brand);color:#fff;border:1px solid var(--brand-ui);padding:7px 12px;border-radius:4px;font-weight:600;font-size:12px;flex:1;text-align:center;text-decoration:none}
 .action:hover{filter:brightness(1.12)}
-.action.secondary{background:#fff;color:var(--brand)}
+.action.secondary{background:var(--surface);color:var(--brand-ui)}
 .action.secondary:hover{background:var(--hover);filter:none}
 
 /* Map furniture */
@@ -157,18 +163,29 @@ textarea{width:100%;border:1px solid var(--field);border-radius:4px;background:#
 .pin.selected{outline:3px solid #ffcf3d;outline-offset:1px}
 .zone-label{background:transparent!important;border:0!important}
 .zone-label span{display:inline-block;transform:translate(-50%,-50%);white-space:nowrap;font-weight:700;font-size:14px;letter-spacing:.3px;color:#fff;padding:4px 10px;border-radius:4px;box-shadow:0 2px 8px #0004;pointer-events:none}
-.leaflet-tooltip.techlabel{background:#fffef8f5;border:2px solid #f3b445;border-radius:4px;box-shadow:0 2px 8px #0004;color:#14344b;font-weight:700;font-size:12px;padding:4px 8px;white-space:nowrap}
-.techlabel .twn{font-weight:400;color:#3f5769}
-.leaflet-tooltip.marketlabel{background:#eafafff5;border:1px solid #28a5bd;border-radius:4px;box-shadow:0 1px 6px #0005;color:#12334b;font-weight:600;font-size:11px;padding:2px 5px;white-space:nowrap}
-.marketlabel .name{color:#116995}
-.leaflet-tooltip.edge-label{font-weight:700;color:#133c56;font-size:10px;background:#fffffff5;border:1px solid #8eb4c9;border-radius:4px;padding:3px 5px;box-shadow:0 1px 4px #0003;white-space:nowrap;pointer-events:none}
+.leaflet-tooltip.techlabel{background:var(--tech-tip-bg);border:2px solid #f3b445;border-radius:4px;box-shadow:0 2px 8px #0004;color:var(--tech-tip-ink);font-weight:700;font-size:12px;padding:4px 8px;white-space:nowrap}
+.techlabel .twn{font-weight:400;color:var(--tech-tip-sub)}
+.leaflet-tooltip.marketlabel{background:var(--market-tip-bg);border:1px solid #28a5bd;border-radius:4px;box-shadow:0 1px 6px #0005;color:var(--market-tip-ink);font-weight:600;font-size:11px;padding:2px 5px;white-space:nowrap}
+.marketlabel .name{color:var(--market-tip-name)}
+.leaflet-tooltip.edge-label{font-weight:700;color:var(--edge-tip-ink);font-size:10px;background:var(--edge-tip-bg);border:1px solid var(--edge-tip-line);border-radius:4px;padding:3px 5px;box-shadow:0 1px 4px #0003;white-space:nowrap;pointer-events:none}
 /* Connector labels only once zoomed in far enough to have room for them */
 .hide-edge-labels .leaflet-tooltip.edge-label{display:none}
 .leaflet-container{font-family:var(--body-font)}
-.leaflet-tooltip.hover-tip{font-size:12px;font-weight:600;color:var(--ink);border-radius:4px}
+.leaflet-tooltip.hover-tip{font-size:12px;font-weight:600;color:var(--ink);background:var(--pop);border-color:var(--pop);border-radius:4px}
+/* Leaflet draws its tooltip arrows and popup bubbles in plain white, so they take the surface token too */
+.leaflet-tooltip-top:before{border-top-color:var(--pop)}
+.leaflet-tooltip-bottom:before{border-bottom-color:var(--pop)}
+.leaflet-tooltip-left:before{border-left-color:var(--pop)}
+.leaflet-tooltip-right:before{border-right-color:var(--pop)}
 .leaflet-tooltip.hover-tip small{display:block;font-weight:400;color:var(--muted)}
 .leaflet-popup-content{font-size:13px}
-.leaflet-popup-content a{color:var(--brand)}
+.leaflet-popup-content a{color:var(--brand-ui)}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--pop);color:var(--ink)}
+.leaflet-bar a{background-color:var(--surface);color:var(--ink);border-bottom-color:var(--field)}
+.leaflet-bar a:hover,.leaflet-bar a:focus{background-color:var(--ctl-hover)}
+.leaflet-bar a.leaflet-disabled{background-color:var(--ctl-hover);color:var(--muted)}
+.leaflet-control-attribution{background:var(--attr-bg);color:var(--muted)}
+.leaflet-control-attribution a{color:var(--link)}
 
 .stage-anchor{background:transparent!important;border:0!important;pointer-events:none}
 .stage-flag-list{position:absolute;top:18px;left:12px;display:flex;flex-direction:column;align-items:flex-start;gap:3px;pointer-events:none;min-width:98px;filter:drop-shadow(0 1px 4px #0008)}
@@ -178,13 +195,13 @@ textarea{width:100%;border:1px solid var(--field);border-radius:4px;background:#
 /* Sidebar footer: the legend and the build's update stamp, held at the sidebar's bottom edge while the
    sections scroll above it. The sidebar is a flex column only so a short list still pushes it down */
 .sidebar>*{flex:none}
-.sidebar-foot{position:sticky;z-index:2;bottom:0;margin-top:auto;background:var(--panel);border-top:1px solid var(--line);box-shadow:0 -2px 6px #0000000f;padding:9px 16px 7px}
+.sidebar-foot{position:sticky;z-index:2;bottom:0;margin-top:auto;background:var(--panel);border-top:1px solid var(--line);box-shadow:0 -2px 6px var(--shadow);padding:9px 16px 7px}
 .legend{font-size:12px;color:var(--ink);display:flex;flex-wrap:wrap;gap:5px 14px;margin-bottom:6px}
 .legend:empty{display:none}
 .updated{font-size:10px;color:var(--muted)}
 .legend span{display:inline-flex;align-items:center;gap:5px}
 .legend .legend-head{font-weight:600}
-.legend .sw{width:12px;height:12px;border-radius:3px;display:inline-block;flex:none}
+.legend .sw{width:12px;height:12px;border-radius:3px;display:inline-block;flex:none;box-shadow:inset 0 0 0 1px var(--sw-edge)}
 .legend .ln{width:21px;border-top:3px dashed #4fc4ea}
 .legend .ln.staff{border-top-color:#ffa63a}
 

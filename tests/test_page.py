@@ -553,3 +553,47 @@ def test_dots_are_sized_by_customers_and_the_legend_lists_the_tiers():
     assert legend and "DOT_TIERS.forEach" in legend.group(0)
     assert "Customers" in legend.group(0)
     assert "createTextNode(text)" in legend.group(0)
+
+
+def _css_rule(css, selector):
+    # The declarations of the rule that starts a line with exactly this selector
+    match = re.search(r"^" + re.escape(selector) + r"\{([^}]*)\}", css, re.M)
+    assert match, selector
+    return match.group(1)
+
+
+SURFACE_RULES = (
+    "html,body",
+    "#map",
+    ".sidebar",
+    ".select",
+    ".seg button",
+    ".seg button.active",
+    "textarea",
+    ".action.secondary",
+    ".sidebar-foot",
+    ".leaflet-tooltip.techlabel",
+    ".leaflet-tooltip.marketlabel",
+    ".leaflet-tooltip.edge-label",
+    ".leaflet-tooltip.hover-tip",
+    ".legend .sw",
+)
+
+
+def test_surfaces_take_their_colors_from_tokens_not_light_literals():
+    # A surface that hardcodes white (or the map gray) stays light in dark mode. The data colors
+    # (pins, routes, zone and region palettes) are not in this list on purpose
+    css = (page.WEB_DIR / "app.css").read_text(encoding="utf-8")
+    for selector in SURFACE_RULES:
+        body = _css_rule(css, selector)
+        for value in re.findall(r"background(?:-color)?:([^;]*)", body):
+            assert not re.search(r"#fff(?:fff)?(?![0-9a-f])|\bwhite\b|#dfe3e8", value, re.I), (
+                selector,
+                value,
+            )
+    # The map gray lives in one token, and the tooltips and scrollbar in theirs
+    assert len(re.findall(r"#dfe3e8", css, re.I)) == 1
+    root = _css_rule(css, ":root")
+    for token in ("--surface", "--pop", "--map-bg", "--heading", "--brand-ui", "--tech-ink"):
+        assert token + ":" in root, token
+    assert "#c3c8d2" not in re.sub(r"--scroll:#c3c8d2|--switch-off:#c3c8d2", "", css)
