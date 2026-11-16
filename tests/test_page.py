@@ -301,3 +301,76 @@ def test_unassigned_region_defaults_off_in_source():
     assert "regionsOn: allOn(regionNames)" not in source
     default = "regionsOn: Object.fromEntries(regionNames.map(n => [n, n !== D.unassignedLabel]))"
     assert default + "," in source
+
+
+COLLAPSIBLE = {
+    "zonesSection": "zonesBody",
+    "outlinesSection": "outlinesBody",
+    "dotsSection": "dotsBody",
+    "filterSection": "filterBody",
+    "dispatchSection": "dispatchBody",
+    "stagingSection": "stagingBody",
+    "basemapSection": "basemapBody",
+    "notesSection": "notesBody",
+}
+
+
+def _section(html, section_id):
+    match = re.search(rf'<section[^>]*id="{section_id}".*?^  </section>', html, re.M | re.S)
+    assert match, section_id
+    return match.group(0)
+
+
+def test_every_collapsible_section_has_a_toggle_for_its_body():
+    html = (page.WEB_DIR / "template.html").read_text(encoding="utf-8")
+    for section_id, body_id in COLLAPSIBLE.items():
+        section = _section(html, section_id)
+        buttons = re.findall(r"<button[^>]*\bcollapse-btn\b[^>]*>", section)
+        assert len(buttons) == 1, section_id
+        button = buttons[0]
+        assert 'type="button"' in button
+        assert 'aria-expanded="true"' in button
+        assert f'aria-controls="{body_id}"' in button
+        assert f'id="{body_id}"' in section
+        assert "aria-label=" in button and "data-name=" in button
+
+
+def test_the_toggle_is_never_inside_a_layer_switch_label():
+    # Clicking a layer's header label flips its switch, so the toggle sits beside it
+    html = (page.WEB_DIR / "template.html").read_text(encoding="utf-8")
+    assert html.count('class="collapse-btn"') == len(COLLAPSIBLE)
+    for label in re.findall(r"<label\b.*?</label>", html, re.S):
+        assert "collapse-btn" not in label
+
+
+def test_search_destination_and_selected_sections_have_no_toggle():
+    html = (page.WEB_DIR / "template.html").read_text(encoding="utf-8")
+    for section_id in ("searchSection", "driveToSection", "selectedSection"):
+        match = re.search(rf'<div[^>]*id="{section_id}".*?\n  </div>\n', html, re.S)
+        assert match, section_id
+        assert "collapse-btn" not in match.group(0), section_id
+
+
+def test_collapsed_set_is_stored_apart_from_the_map_state():
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    assert "const COLLAPSE_KEY = 'maybemap_collapsed_v1';" in source
+    assert "const STATE_KEY = 'maybemap_state_v1';" in source
+
+
+def test_collapsing_only_changes_the_sidebar_not_the_map():
+    # Collapse is not a switch: its handler never redraws the map or touches state
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    for name in ("setCollapsed", "toggleCollapsed"):
+        handler = re.search(rf"^function {name}\(.*?^\}}$", source, re.M | re.S)
+        assert handler, f"{name} not found"
+        body = handler.group(0)
+        assert "update(" not in body and "state." not in body and "persist(" not in body, name
+    toggle = re.search(r"^function toggleCollapsed\(.*?^\}$", source, re.M | re.S).group(0)
+    assert "writeStore(COLLAPSE_KEY" in toggle
+    # The click handler goes straight to toggleCollapsed, and nothing else calls update()
+    assert "addEventListener('click', () => toggleCollapsed(section))" in source
+
+
+def test_collapsed_sections_hide_only_their_body():
+    css = (page.WEB_DIR / "app.css").read_text(encoding="utf-8")
+    assert ".section.collapsed .layer-body,.section.collapsed .section-body{display:none}" in css

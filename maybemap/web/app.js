@@ -10,6 +10,7 @@ const $ = sel => document.querySelector(sel);
 // ---------- Storage: per-viewer conveniences only, every access guarded ----------
 const STATE_KEY = 'maybemap_state_v1';
 const NOTES_KEY = 'maybemap_notes_v1';
+const COLLAPSE_KEY = 'maybemap_collapsed_v1';
 function readStore(key) { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) { return null; } }
 function writeStore(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { return false; } }
 
@@ -998,6 +999,28 @@ $('#notesImportInput').addEventListener('change', async e => {
     e.target.value = '';
   }
 });
+
+// ---------- Collapsible sidebar sections ----------
+// Which sections start collapsed: the saved ids that name a real section. Anything else in the
+// saved value (a non-array, non-strings, ids from an older page) is ignored
+function collapsedSet(saved, ids) {
+  if (!Array.isArray(saved)) return [];
+  return [...new Set(saved.filter(id => typeof id === 'string' && ids.includes(id)))];
+}
+const collapseSections = [...document.querySelectorAll('.section .collapse-btn')].map(b => b.closest('.section'));
+// Collapse is a sidebar view setting, not a layer switch: nothing here touches state or redraws the map
+function setCollapsed(section, collapsed) {
+  const btn = section.querySelector('.collapse-btn');
+  section.classList.toggle('collapsed', collapsed);
+  btn.setAttribute('aria-expanded', String(!collapsed));
+  btn.setAttribute('aria-label', (collapsed ? 'Expand ' : 'Collapse ') + btn.dataset.name);
+}
+function toggleCollapsed(section) {
+  setCollapsed(section, !section.classList.contains('collapsed'));
+  writeStore(COLLAPSE_KEY, collapseSections.filter(s => s.classList.contains('collapsed')).map(s => s.id));
+}
+for (const id of collapsedSet(readStore(COLLAPSE_KEY), collapseSections.map(s => s.id))) setCollapsed($('#' + id), true);
+collapseSections.forEach(section => section.querySelector('.collapse-btn').addEventListener('click', () => toggleCollapsed(section)));
 
 // ---------- Wiring ----------
 function update() {
