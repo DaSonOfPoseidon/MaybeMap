@@ -28,6 +28,7 @@ NAMES = (
     "activeTechs",
     "pinIsOrange",
     "directoryHits",
+    "collapsedSet",
 )
 
 
@@ -367,3 +368,26 @@ def test_unassigned_region_starts_off_and_the_others_on():
         "South": True,
         "Unassigned": False,
     }
+
+
+COLLAPSE_IDS = ["zonesSection", "basemapSection"]
+
+
+def _collapsed(saved):
+    return _run(f"collapsedSet({json.dumps(saved)}, {json.dumps(COLLAPSE_IDS)})")
+
+
+def test_collapsed_set_ignores_a_missing_or_non_array_value():
+    assert _collapsed(None) == []
+    assert _collapsed("zonesSection") == []
+    assert _collapsed({"zonesSection": True}) == []
+    assert _collapsed(7) == []
+
+
+def test_collapsed_set_drops_non_strings_and_unknown_ids():
+    assert _collapsed([1, None, ["zonesSection"], "gone", "basemapSection"]) == ["basemapSection"]
+
+
+def test_collapsed_set_keeps_a_valid_id_once():
+    assert _collapsed(["zonesSection", "zonesSection"]) == ["zonesSection"]
+    assert _collapsed([]) == []

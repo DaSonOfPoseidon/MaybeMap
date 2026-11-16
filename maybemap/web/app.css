@@ -46,6 +46,20 @@ path.leaflet-interactive:focus{outline:none}
 .layer.off .layer-body{opacity:.45}
 .layer.off{background:#f3f6f8}
 
+/* Collapsing: a chevron beside each header hides the section's body. It is not a switch, and the
+   header (with its hint line) stays visible */
+.section-head{display:flex;align-items:center;gap:8px}
+.section-head > .eyebrow{margin:0;flex:1}
+.section-head .layer-head{flex:1;min-width:0}
+.section:not(.layer) > .section-head{margin-bottom:8px}
+.collapse-btn{flex:none;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:0;border-radius:6px;background:transparent;color:#657b8b;cursor:pointer}
+.collapse-btn:hover{background:#e6edf2}
+.collapse-btn:focus-visible{outline:3px solid #71c3f8;outline-offset:1px}
+.collapse-btn svg{transition:transform .15s}
+.section.collapsed .collapse-btn svg{transform:rotate(-90deg)}
+.section.collapsed .layer-body,.section.collapsed .section-body{display:none}
+.section.collapsed:not(.layer) > .section-head{margin-bottom:0}
+
 /* Switches: the same pill switch across layer heads, label rows and swatch rows */
 .layer-head input,.label-toggle input,.swatch-toggle input{appearance:none;-webkit-appearance:none;position:relative;width:42px;height:24px;border-radius:24px;border:1px solid #afc2cf;background:#cad5dc;flex:none;margin:0;cursor:pointer;transition:background .15s,border-color .15s}
 .layer-head input:before,.label-toggle input:before,.swatch-toggle input:before{content:'';position:absolute;width:18px;height:18px;border-radius:50%;background:#fff;top:2px;left:2px;box-shadow:0 1px 3px #0004;transition:transform .15s}
