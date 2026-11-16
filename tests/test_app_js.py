@@ -346,3 +346,24 @@ def test_directory_hits_match_notes_and_the_state():
 def test_directory_hits_are_empty_for_a_blank_query():
     # The rows show nothing for a blank box, so Enter must not open "the first town"
     assert _hit_keys("") == []
+
+
+def test_unassigned_region_starts_off_and_the_others_on():
+    # The page's own DEFAULTS, run with stand-ins for the payload it reads: the gray
+    # Unassigned dots start hidden, and every real region's switch starts on
+    source = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    block = re.search(r"^const DEFAULTS = \{.*?^\};$", source, re.M | re.S)
+    assert block, "DEFAULTS not found in app.js"
+    prelude = (
+        "const D = { unassignedLabel: 'Unassigned', buckets: [], serviceTypes: [], departments: [],"
+        " regions: [{ name: 'North' }, { name: 'South' }, { name: 'Unassigned' }] };\n"
+        "const zoneNames = [];\n"
+        "const regionNames = D.regions.map(r => r.name);\n"
+        "const stagingTypes = [];\n"
+        "const allOn = names => Object.fromEntries(names.map(n => [n, true]));\n" + block.group(0)
+    )
+    assert _run("DEFAULTS.regionsOn", prelude) == {
+        "North": True,
+        "South": True,
+        "Unassigned": False,
+    }
