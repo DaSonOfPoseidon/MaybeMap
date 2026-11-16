@@ -267,12 +267,20 @@ function matchPlaces(list, q, excludeIndex, limit = 8) {
   hits.sort((a, b) => Number(b.prefix) - Number(a.prefix) || a.name.localeCompare(b.name));
   return hits.slice(0, limit).map(h => h.j);
 }
+// A town with no row in the city export (city is null) is outside the service area. With a tech
+// living there it is the one pin drawn orange; every other pin is the normal teal
+const outsideService = (p, activeCount) => p.city === null && activeCount > 0;
+// The techs a pin names on the map. An orange pin names none, so its label and hover
+// show the town only (the town card still lists them)
+function namedTechs(p, on) {
+  return outsideService(p, on.length) ? [] : on;
+}
 const pinLayer = L.layerGroup();
 const routeLayer = L.layerGroup();
-function pinIcon(tech, selected) {
+function pinIcon(outside, selected) {
   return L.divIcon({
-    className: '', html: '<div class="pin' + (tech ? ' tech' : '') + (selected ? ' selected' : '') + '"></div>',
-    iconSize: tech ? [21, 21] : [17, 17], iconAnchor: tech ? [10, 10] : [8, 8],
+    className: '', html: '<div class="pin' + (outside ? ' tech' : '') + (selected ? ' selected' : '') + '"></div>',
+    iconSize: outside ? [21, 21] : [17, 17], iconAnchor: outside ? [10, 10] : [8, 8],
   });
 }
 const pins = places.map((p, i) => {
@@ -282,7 +290,7 @@ const pins = places.map((p, i) => {
 });
 function pinLabel(p) {
   const parts = [];
-  const on = activeTechs(p);
+  const on = namedTechs(p, activeTechs(p));
   const tech = on.length && state.techNames;
   if (tech) parts.push('<span class="name">' + esc(techList(on)) + '</span>');
   if (state.townNames || (tech && !compactLabels())) parts.push('<span class="twn">' + esc(p.name) + '</span>');
@@ -290,13 +298,13 @@ function pinLabel(p) {
 }
 function pinTitle(p) {
   const note = getNote(keyOf(p.name, p.state)) ? ' 📝' : '';
-  const on = activeTechs(p);
+  const on = namedTechs(p, activeTechs(p));
   return (on.length ? techList(on) + ' — ' : '') + p.name + note;
 }
 // Permanent labels are placed greedily: techs first, each taking the first side of
 // its pin (right, left, above, below) that does not cover a label already placed.
-// A tech is always labeled, on its least-crowded side if every side is taken; a
-// plain town that finds no room keeps a hover label instead.
+// A tech pin is always labeled, on its least-crowded side if every side is taken; a
+// plain town (an orange pin included) that finds no room keeps a hover label instead.
 const LABEL_SIDES = [
   { direction: 'right', offset: [8, 0], box: (pt, w, h) => [pt.x + 10, pt.y - h / 2, w, h] },
   { direction: 'left', offset: [-8, 0], box: (pt, w, h) => [pt.x - 10 - w, pt.y - h / 2, w, h] },
@@ -309,20 +317,23 @@ const overlap = (a, b) => Math.max(0, Math.min(a[0] + a[2], b[0] + b[2]) - Math.
 // their labels drop the town name until there is room for it
 const compactLabels = () => map.getZoom() < 8;
 function labelText(p) {
-  const on = activeTechs(p);
+  const on = namedTechs(p, activeTechs(p));
   if (on.length && state.techNames) return techList(on) + (compactLabels() ? '' : ' — ' + p.name);
   return p.name;
 }
 function renderPins() {
   const placed = [];
-  const count = places.map(p => activeTechs(p).length);
+  const active = places.map(p => activeTechs(p).length);
+  const outside = places.map((p, i) => outsideService(p, active[i]));
+  // Only techs a pin names get label priority: an orange pin is labeled like a plain town
+  const count = places.map((p, i) => (outside[i] ? 0 : active[i]));
   const order = places.map((p, i) => i).sort((a, b) => count[b] - count[a]);
   for (const i of order) {
     const p = places[i];
     const mk = pins[i];
-    // The department filter decides which pins are tech pins, so the icon follows it
-    mk.setIcon(pinIcon(count[i] > 0, selectedKey === keyOf(p.name, p.state)));
-    mk.setZIndexOffset(count[i] > 0 ? 500 : 0);
+    // The department filter decides which pins are orange, so the icon follows it
+    mk.setIcon(pinIcon(outside[i], selectedKey === keyOf(p.name, p.state)));
+    mk.setZIndexOffset(active[i] > 0 ? 500 : 0);
     if (mk.getTooltip()) mk.unbindTooltip();
     const label = pinLabel(p);
     let side = null;
@@ -802,11 +813,13 @@ function renderControls() {
   const visibleZones = zoneNames.filter(z => state.zonesOn[z]).length;
   const filtered = cities.filter(cityPasses);
   const techCount = techs.filter(techOn).length;
+  // Techs on orange pins are never named on the map, so they are not labels
+  const labeledTechs = places.reduce((n, p) => n + namedTechs(p, activeTechs(p)).length, 0);
   $('#zonesHint').textContent = visibleZones + ' of ' + zoneNames.length + ' zones shown';
   $('#outlinesHint').textContent = D.outlines.features.filter(f => cityPasses(cities[f.properties.city])).length + ' of ' + D.outlines.features.length + ' city limits match the filters';
   $('#dotsHint').textContent = filtered.length + ' of ' + cities.length + ' towns match the filters';
   $('#dispatchHint').textContent = places.length + ' towns · ' + techCount + ' techs';
-  $('#techNamesHint').textContent = state.techNames ? 'ON · ' + techCount + ' technician labels' : 'OFF · tech pins stay orange';
+  $('#techNamesHint').textContent = state.techNames ? 'ON · ' + labeledTechs + ' technician labels' : 'OFF · no technician labels';
   $('#townNamesHint').textContent = state.townNames ? 'ON · every dispatch town labeled' : 'OFF · hover a pin for its name';
   $('#placeLabelsHint').textContent = BASEMAP_LABEL_HINT[state.basemap](state.placeLabels);
 
@@ -832,7 +845,7 @@ function renderLegend() {
   if (state.layers.dots || state.layers.outlines) item('<i class="sw" style="background:linear-gradient(90deg,#1f77b4,#e6550d,#2ca02c)"></i>', 'Town colors = region');
   if (state.layers.dots) item('<i class="sw" style="background:#9e9e9e;border-radius:50%"></i>', 'No region');
   if (state.layers.dispatch) {
-    item('<i class="dot tech"></i>', 'Technician');
+    item('<i class="dot tech"></i>', 'Tech home outside the service area');
     item('<i class="dot"></i>', 'Dispatch town');
     if (state.routeMode === 'neighbors') item('<i class="ln"></i>', 'Closest town');
     if (state.routeMode === 'staff') item('<i class="ln staff"></i>', 'Nearest tech');
