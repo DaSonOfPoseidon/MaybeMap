@@ -174,6 +174,27 @@ def test_drive_time_destination_is_built_once_outside_the_card():
     assert draw and "renderCard()" not in draw.group(0)
 
 
+def test_search_box_follows_how_a_town_was_opened():
+    # Opening a town from anywhere but its own search result (a destination row, a closest-town or
+    # tech row, a pin or a region) empties the search box and its results. Clicking a search result
+    # keeps the query, so other results can be tried, and redraws the list so the picked row is
+    # marked active
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    pick = re.search(r"^function select\(key, fly, fromSearch\) \{.*?^\}$", source, re.M | re.S)
+    assert pick
+    body = pick.group(0)
+    assert re.search(r"if \(!fromSearch\) \$\('#townFilter'\)\.value = '';", body)
+    # The list is redrawn after the selection is set, so the picked row shows .active
+    assert body.index("selectedKey = key") < body.index("renderDirectory()")
+    # Only the main search's result buttons pass fromSearch
+    directory = re.search(r"^function renderDirectory\(\) \{.*?^\}$", source, re.M | re.S)
+    assert directory and "select(s.key, true, true)" in directory.group(0)
+    call = r"(?<![\w.])select\((?:keyOf\([^()]*\)|[\w.]+), (?:true|false)(?:, true)?\)"
+    calls = re.findall(call, source)
+    assert len(calls) == 6
+    assert sum(c.endswith(", true, true)") for c in calls) == 1
+
+
 def test_sidebar_order_is_search_then_destination_then_card_then_layers():
     html = (page.WEB_DIR / "template.html").read_text(encoding="utf-8")
     offsets = [
