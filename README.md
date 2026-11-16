@@ -66,7 +66,9 @@ switches. They are not separate views.
 - **Town filters**: customer count, service type and region. These apply to both dots
   and outlines.
 - **Dispatch**: pins for every town that has a region, plus every tech's home town. Tech
-  pins are orange. Route lines can show each town's closest towns, its nearest tech, or
+  towns inside the service area stay the normal teal; only a town that is not in the city
+  export, where a tech lives, is orange, and it shows no tech names on the map (its card
+  still lists them). Route lines can show each town's closest towns, its nearest tech, or
   the selected town's three closest, all labeled with road miles and drive time.
 - **Staging sites**: badges on the staging towns, one switch per type.
 - **Basemap**: Light gray, Satellite or Streets, with optional place names.

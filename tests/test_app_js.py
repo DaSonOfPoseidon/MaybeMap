@@ -1,4 +1,4 @@
-# The page's pure helpers (notes CSV, drive-to search, closest techs), run under Node.
+# The page's pure helpers (notes CSV, drive-to search, closest techs, orange pins), run under Node.
 # Skipped without Node.
 
 import json
@@ -21,6 +21,8 @@ NAMES = (
     "csvParse",
     "matchPlaces",
     "closestTechs",
+    "outsideService",
+    "namedTechs",
 )
 
 
@@ -154,3 +156,31 @@ def test_closest_techs_does_not_change_its_input():
     names = "r.map(x => x.tech.name)"
     got = _run(f"(() => {{ const r = {json.dumps(rows)}; closestTechs(r); return {names}; }})()")
     assert got == ["b", "a"]
+
+
+# A tech town with no row in the city export (city is null) is outside the service area
+IN_EXPORT = {"name": "Zz Inside", "city": 7}
+OUTSIDE = {"name": "Zz Outside", "city": None}
+
+
+def test_outside_service_needs_no_export_row_and_an_active_tech():
+    assert _run(f"outsideService({json.dumps(OUTSIDE)}, 1)") is True
+    assert _run(f"outsideService({json.dumps(OUTSIDE)}, 3)") is True
+
+
+def test_outside_service_is_false_with_no_active_tech():
+    # The department filter can hide every tech of a town
+    assert _run(f"outsideService({json.dumps(OUTSIDE)}, 0)") is False
+
+
+def test_outside_service_is_false_for_a_town_in_the_export():
+    assert _run(f"outsideService({json.dumps(IN_EXPORT)}, 2)") is False
+    # City id 0 is a real export row, not "no row"
+    assert _run('outsideService({"city": 0}, 2)') is False
+
+
+def test_orange_pins_name_no_techs_and_teal_pins_keep_theirs():
+    techs = [{"name": "Zz One"}, {"name": "Zz Two"}]
+    assert _run(f"namedTechs({json.dumps(OUTSIDE)}, {json.dumps(techs)})") == []
+    assert _run(f"namedTechs({json.dumps(IN_EXPORT)}, {json.dumps(techs)})") == techs
+    assert _run(f"namedTechs({json.dumps(OUTSIDE)}, [])") == []
