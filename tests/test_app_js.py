@@ -29,6 +29,9 @@ NAMES = (
     "pinIsOrange",
     "directoryHits",
     "collapsedSet",
+    "MIN_DOT",
+    "MAX_DOT",
+    "dotRadius",
 )
 
 
@@ -391,3 +394,24 @@ def test_collapsed_set_drops_non_strings_and_unknown_ids():
 def test_collapsed_set_keeps_a_valid_id_once():
     assert _collapsed(["zonesSection", "zonesSection"]) == ["zonesSection"]
     assert _collapsed([]) == []
+
+
+def _radii(pairs):
+    return _run(f"{json.dumps(pairs)}.map(([n, max]) => dotRadius(n, max))")
+
+
+def test_dot_radius_grows_with_customers_and_handles_missing_counts():
+    low, high = _run("[MIN_DOT, MAX_DOT]")
+    # A missing, empty or negative count, or no largest town to scale by, gets the smallest dot
+    missing = _run("[null, undefined, NaN].map(n => dotRadius(n, 100))")
+    assert missing == [low] * 3
+    assert _radii([[0, 100], [-5, 100], [50, 0], [50, -1], [0, 0]]) == [low] * 5
+    # The largest town gets the biggest dot, and a count past it is clamped there
+    assert _radii([[100, 100], [500, 100]]) == [high, high]
+    # Dot area, not radius, follows the count: a town with a quarter of the customers
+    # has half the way from the smallest dot to the biggest
+    assert _radii([[25, 100]]) == [low + (high - low) * 0.5]
+    # Growing, and always finite
+    small, mid, big = _radii([[1, 1000], [100, 1000], [1000, 1000]])
+    assert low < small < mid < big == high
+    assert all(0 < r < 1e6 for r in (small, mid, big))

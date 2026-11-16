@@ -183,7 +183,7 @@ textarea{width:100%;border:1px solid var(--field);border-radius:4px;background:#
 .legend:empty{display:none}
 .updated{font-size:10px;color:var(--muted)}
 .legend span{display:inline-flex;align-items:center;gap:5px}
-.legend .sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+.legend .sw{width:12px;height:12px;border-radius:3px;display:inline-block;flex:none}
 .legend .ln{width:21px;border-top:3px dashed #4fc4ea}
 .legend .ln.staff{border-top-color:#ffa63a}
 
