@@ -80,9 +80,10 @@ const allKeys = [...new Set([...cityByKey.keys(), ...placeIdxByKey.keys()])];
 const techRowOfPlace = new Map(D.dispatch.techPlaces.map((p, k) => [p, k]));
 const toCityCol = new Map(D.dispatch.toCity.ids.map((id, k) => [id, k]));
 let selectedKey = null;
-// The destination picked in the open card's drive-time search. It outlives the open town, so
-// another start town shows the time from there; renderCard() reads it, so whatever changes it
-// re-renders the card
+// The destination picked in the "Drive time to…" sidebar section (#driveToSection, built by
+// driveToSection()). Picking a town sets it, and renderDriveTo() redraws the answer from it. It
+// outlives the open town, so another start town shows the time from there. Only the ✕ button
+// resets it to null: closing the card or changing the selection leaves it
 let driveToKey = null;
 
 function townInfo(key) {

@@ -94,13 +94,16 @@ region in the export.
 A tech with no Town is placed at the **hub of their Primary Region**: the region's town
 with the most customers (the export's `Customers` count). Their card says so, since drive
 times from there are an estimate of where they start. A town with no count is skipped. A
-tie goes to the town whose name appears in the region's name, then to the name first in
-order. The build prints each hub it picked this way, so you can confirm it. To pick a
-different town, add a row to `data/region_hubs.csv` (`Region,Hub,State`); a row always wins
-over the counts. If a Primary Region lists several regions separated by commas, the tech is
-placed at the **first** one's hub, and the build prints the tech and the region it chose. A
-region where no town has a count and no row names a hub stops the build, naming the region
-and the file to edit, but only when a tech with no Town needs that region. A tech with
+tie goes to the town whose name is a whole word of the region's name ("Ash" is not in
+"Nashville-Lebanon"), then to the name first in order. The build prints each hub it picked
+this way, so you can confirm it. To pick a different town, add a row to
+`data/region_hubs.csv` (`Region,Hub,State`); a row always wins over the counts. A row whose
+Region is not a region in the export (matched exactly, as the export spells it) stops the
+build and names it, so a typo can't go unnoticed. If a Primary Region lists several regions
+separated by commas, the tech is placed at the **first** one's hub, and the build prints the
+tech and the region it chose. A region where no town has a count and no row names a hub
+stops the build, naming the region and the file to edit, but only when a tech with no Town
+needs that region. A tech with
 neither a Town nor a known region can't be placed. The build names them, and so does the
 dispatch section of the page.
 

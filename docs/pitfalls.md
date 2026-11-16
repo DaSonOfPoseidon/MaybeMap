@@ -120,3 +120,17 @@ from a value that was computed for another job (ordering, priority, counts). Whe
 flag depends on a filter, the filter's handler redraws it too.
 
 **Where:** issue #29 (label and search-swatch colors after #28).
+
+## An override row that matches nothing is silently dropped
+
+A row in an operator's file (`region_hubs.csv`) names a region by its text. A typo in the Region
+matched no region in the export, so the row did nothing and the build went on with the default hub,
+with no sign that the override was never applied.
+
+**Check:** every row of an operator-edited file is either applied or reported. After matching rows to
+what they refer to, the leftovers stop the build, naming each one and the file. The match uses the
+same comparison as everywhere else for that key (exact, edges stripped). The same goes for an error
+about a bad value: it names the file the value came from (a hub's town is in `region_hubs.csv`, a
+tech's own town is in `tech_info.csv`), not the one the code happened to be reading.
+
+**Where:** issues #37 and #38, found by the pre-push gate on PR #39.
