@@ -129,6 +129,24 @@ def test_department_changes_refresh_the_open_card():
     assert writes, "no department handler found in app.js"
     for line in writes:
         assert "renderCard()" in line, line
+        # The search swatches follow the same filter (orange pins only)
+        assert "renderDirectory()" in line, line
+
+
+def test_label_and_search_colors_follow_the_orange_pin_rule():
+    # count[] is the label placement priority, and a teal pin with an active tech has count > 0,
+    # so keying the label class on it painted in-service towns orange. The class and the search
+    # swatch both come from pinIsOrange, the rule the pin icon uses
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    render = re.search(r"^function renderPins\(\) \{.*?^\}$", source, re.M | re.S)
+    assert render
+    class_line = next(line for line in render.group(0).splitlines() if "className:" in line)
+    assert "count[" not in class_line
+    assert "outside[i]" in class_line
+    assert "pinIsOrange" in render.group(0)
+    directory = re.search(r"^function renderDirectory\(\) \{.*?^\}$", source, re.M | re.S)
+    assert directory and "pinIsOrange(" in directory.group(0)
+    assert "techs.length ? ' tech'" not in directory.group(0)
 
 
 def test_card_offers_a_drive_time_search_that_keeps_its_destination():

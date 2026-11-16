@@ -23,6 +23,9 @@ NAMES = (
     "closestTechs",
     "outsideService",
     "namedTechs",
+    "techOn",
+    "activeTechs",
+    "pinIsOrange",
 )
 
 
@@ -42,8 +45,9 @@ def _helpers() -> str:
     return "\n".join(parts)
 
 
-def _run(expr: str):
-    script = _helpers() + f"\nprocess.stdout.write(JSON.stringify({expr}));"
+def _run(expr: str, prelude: str = ""):
+    # prelude declares the page globals a helper reads (techs, state)
+    script = prelude + "\n" + _helpers() + f"\nprocess.stdout.write(JSON.stringify({expr}));"
     out = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True)
     return json.loads(out.stdout)
 
@@ -184,3 +188,32 @@ def test_orange_pins_name_no_techs_and_teal_pins_keep_theirs():
     assert _run(f"namedTechs({json.dumps(OUTSIDE)}, {json.dumps(techs)})") == []
     assert _run(f"namedTechs({json.dumps(IN_EXPORT)}, {json.dumps(techs)})") == techs
     assert _run(f"namedTechs({json.dumps(OUTSIDE)}, [])") == []
+
+
+# The orange pin rule has one source of truth: pinIsOrange. Labels and search swatches use it
+ZZ_TECHS = [
+    {"name": "Zz One", "departments": ["Zz Dept"]},
+    {"name": "Zz Two", "departments": ["Zz Other"]},
+]
+PIN_PRELUDE = (
+    f"const techs = {json.dumps(ZZ_TECHS)};"
+    " const state = { depts: { 'Zz Dept': true, 'Zz Other': false } };"
+)
+
+
+def _orange(place: dict) -> bool:
+    return _run(f"pinIsOrange({json.dumps(place)})", PIN_PRELUDE)
+
+
+def test_in_service_tech_town_is_not_an_orange_pin():
+    assert _orange({**IN_EXPORT, "techs": [0]}) is False
+
+
+def test_outside_town_with_an_active_tech_is_an_orange_pin():
+    assert _orange({**OUTSIDE, "techs": [0]}) is True
+
+
+def test_outside_town_with_no_active_tech_is_not_an_orange_pin():
+    # No techs at all, and a tech whose only department is switched off
+    assert _orange({**OUTSIDE, "techs": []}) is False
+    assert _orange({**OUTSIDE, "techs": [1]}) is False
