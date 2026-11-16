@@ -76,6 +76,10 @@ const zoneByLabel = new Map(D.zones.features.map(f => [f.properties.label, f.pro
 const regionColor = new Map(D.regions.map(r => [r.name, r.color]));
 const allKeys = [...new Set([...cityByKey.keys(), ...placeIdxByKey.keys()])];
 let selectedKey = null;
+// The destination picked in the open card's drive-time search. It outlives the open town, so
+// another start town shows the time from there; renderCard() reads it, so whatever changes it
+// re-renders the card
+let driveToKey = null;
 
 function townInfo(key) {
   const city = cityByKey.get(key) || null;
@@ -240,6 +244,19 @@ function nearest(i, n, techsOnly) {
     out.push({ j, m: D.dispatch.meters[i][j], s: D.dispatch.seconds[i][j] });
   }
   return out.sort((a, b) => a.s - b.s || a.m - b.m).slice(0, n);
+}
+// Indexes of the places a search matches: a substring of "name, state", prefix
+// matches first, then by name. The start town and an empty query give nothing
+function matchPlaces(list, q, excludeIndex, limit = 8) {
+  q = String(q).trim().toLowerCase();
+  if (!q) return [];
+  const hits = [];
+  list.forEach((p, j) => {
+    const text = (p.name + ', ' + p.state).toLowerCase();
+    if (j !== excludeIndex && text.includes(q)) hits.push({ j, prefix: text.startsWith(q), name: p.name });
+  });
+  hits.sort((a, b) => Number(b.prefix) - Number(a.prefix) || a.name.localeCompare(b.name));
+  return hits.slice(0, limit).map(h => h.j);
 }
 const pinLayer = L.layerGroup();
 const routeLayer = L.layerGroup();
@@ -440,6 +457,61 @@ function rowEntry(rank, t, from, e, techRow) {
   row.addEventListener('click', () => select(keyOf(dest.name, dest.state), true));
   return row;
 }
+// "Drive time to…": a search over the dispatch towns, and the one answer picked from it
+function driveToSection(t) {
+  const wrap = el('div', 'driveto');
+  const label = el('label', 'field-label', 'Drive time to…');
+  label.htmlFor = 'driveToSearch';
+  label.style.display = 'block';
+  const input = el('input', 'select');
+  input.id = 'driveToSearch';
+  input.type = 'search';
+  input.placeholder = 'Search dispatch towns';
+  input.autocomplete = 'off';
+  const list = el('div', 'suggest');
+  const pick = j => { driveToKey = keyOf(places[j].name, places[j].state); renderCard(); };
+  const hits = () => matchPlaces(places, input.value, t.pi);
+  // Typing redraws only this list: a full card render would drop the input's focus
+  input.addEventListener('input', () => {
+    list.replaceChildren();
+    for (const j of hits()) {
+      const btn = el('button', 'town');
+      btn.type = 'button';
+      btn.append(el('span', '', places[j].name + ', ' + places[j].state));
+      btn.addEventListener('click', () => pick(j));
+      list.append(btn);
+    }
+    if (input.value.trim() && !list.children.length) list.append(el('div', 'more', 'No dispatch town matches.'));
+  });
+  input.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') {
+      const first = hits()[0];
+      if (first !== undefined) { ev.preventDefault(); pick(first); }
+    } else if (ev.key === 'Escape') {
+      input.value = '';
+      list.replaceChildren();
+    }
+  });
+  wrap.append(label, input, list);
+
+  const j = driveToKey !== null && placeIdxByKey.has(driveToKey) ? placeIdxByKey.get(driveToKey) : -1;
+  if (j >= 0) {
+    const result = el('div', 'driveto-result');
+    if (j === t.pi) {
+      result.append(el('p', 'route-note', 'Same town: ' + places[j].name + ', ' + places[j].state + '.'));
+    } else {
+      result.append(rowEntry('→', t, t.pi, { j, m: D.dispatch.meters[t.pi][j], s: D.dispatch.seconds[t.pi][j] }, false));
+    }
+    const clear = el('button', 'clear', '✕');
+    clear.type = 'button';
+    clear.title = 'Clear this destination';
+    clear.setAttribute('aria-label', 'Clear the drive-time destination');
+    clear.addEventListener('click', () => { driveToKey = null; renderCard(); });
+    result.append(clear);
+    wrap.append(result);
+  }
+  return wrap;
+}
 function renderCard() {
   const box = $('#selectedCard');
   box.replaceChildren();
@@ -482,6 +554,7 @@ function renderCard() {
       box.append(el('div', 'field-label', techs.length === 1 ? 'Nearest technician' : '2 nearest technicians'));
       techs.forEach((e, i) => box.append(rowEntry(i + 1, t, t.pi, e, true)));
     }
+    box.append(driveToSection(t));
   } else {
     box.append(el('p', 'route-note', 'Not in the dispatch set: only towns with a region, and tech bases, have drive times.'));
   }

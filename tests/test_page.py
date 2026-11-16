@@ -129,3 +129,13 @@ def test_department_changes_refresh_the_open_card():
     assert writes, "no department handler found in app.js"
     for line in writes:
         assert "renderCard()" in line, line
+
+
+def test_card_offers_a_drive_time_search_that_keeps_its_destination():
+    # The open card has the "Drive time to…" search, and a department change re-renders
+    # the card, so the destination must live outside the card (not be rebuilt from the DOM)
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    assert "Drive time to…" in source
+    assert re.search(r"^let driveToKey\b", source, re.M)
+    card = re.search(r"^function renderCard\(\) \{.*?^\}$", source, re.M | re.S)
+    assert card and "driveToSection(" in card.group(0)
