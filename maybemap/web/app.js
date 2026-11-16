@@ -683,6 +683,7 @@ const searchIndex = allKeys.map(key => {
 });
 // The search's hit list, in the order its rows show: renderDirectory() draws it and Enter opens its first
 function directoryHits(q) {
+  if (!q) return [];
   return searchIndex.filter(s => s.text.includes(q) || getNote(s.key).toLowerCase().includes(q))
     .sort((a, b) => Number(b.t.techs.length > 0) - Number(a.t.techs.length > 0) || a.t.name.localeCompare(b.t.name));
 }

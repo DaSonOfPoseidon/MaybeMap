@@ -244,3 +244,8 @@ def test_directory_hits_match_notes_and_the_state():
     assert _hit_keys("zzneedle") == ["zzb|ZZ"]
     assert _hit_keys("zy") == ["zzc|ZY", "zza|ZY"]
     assert _hit_keys("nomatch") == []
+
+
+def test_directory_hits_are_empty_for_a_blank_query():
+    # The rows show nothing for a blank box, so Enter must not open "the first town"
+    assert _hit_keys("") == []
