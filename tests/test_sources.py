@@ -121,6 +121,35 @@ def test_export_coordinates_are_used_without_geocoding(tmp_path, monkeypatch):
     assert (round(ll["Columbia"].y, 2), round(ll["Columbia"].x, 2)) == (38.95, -92.33)
 
 
+@pytest.mark.parametrize(
+    ("rows", "asked", "pair"),
+    [
+        # latitude from one row and longitude from another is no coordinate pair
+        (["COLUMBIA,MO,Central,38.95,", "COLUMBIA,MO,North,,-92.33"], ["Columbia"], (37.2, -93.29)),
+        (["COLUMBIA,MO,Central,38.95,", "COLUMBIA,MO,North,39.1,-92.4"], [], (39.1, -92.4)),
+        (["COLUMBIA,MO,Central,38.95,-92.33", "COLUMBIA,MO,North,39.1,-92.4"], [], (38.95, -92.33)),
+        (["COLUMBIA,MO,Central,38.95,-92.33"], [], (38.95, -92.33)),
+        (["COLUMBIA,MO,Central,,", "COLUMBIA,MO,North,,"], ["Columbia"], (37.2, -93.29)),
+    ],
+    ids=["lat-then-lon", "partial-then-pair", "first-complete-pair", "single-pair", "none"],
+)
+def test_a_towns_coordinates_come_from_one_export_row(tmp_path, monkeypatch, rows, asked, pair):
+    path = tmp_path / "dupes.csv"
+    path.write_text("City,State,Region,Latitude,Longitude\n" + "\n".join(rows) + "\n")
+    geocoded = []
+
+    def geocode(city, state, progress=""):
+        geocoded.append(city)
+        return {"lat": 37.2, "lon": -93.29}
+
+    monkeypatch.setattr(cities, "geocode_city_state", geocode)
+    points, _ = cities.load_city_points(path)
+    ll = points.to_crs(4326).geometry
+    assert geocoded == asked
+    # every row of the town carries the same pair
+    assert {(round(g.y, 2), round(g.x, 2)) for g in ll} == {pair}
+
+
 # 0 is the placeholder query exports write for "unknown", never a real town here
 @pytest.mark.parametrize(
     "lat,lon",

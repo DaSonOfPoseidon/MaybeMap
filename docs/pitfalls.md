@@ -96,3 +96,15 @@ reads in it. A write in the wrong encoding would have gone unnoticed.
 result instead (the bytes on disk).
 
 **Where:** issue #8, found by the pre-push gate.
+
+## Aggregating paired columns independently
+
+`groupby(...).agg(lat="first", lon="first")` takes each column's first non-null value on its
+own. A town on several export rows, one with only a latitude and another with only a
+longitude, got a point built from two different rows, and it was never geocoded.
+
+**Check:** values that only mean something together (latitude and longitude) are taken from
+one row: filter to the rows that have all of them, then take the first. When no row has
+the whole set, all of them are NA.
+
+**Where:** the pre-push gate, filed as #15 (`load_city_points`).

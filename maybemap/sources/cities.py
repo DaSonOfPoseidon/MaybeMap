@@ -155,14 +155,15 @@ def load_city_points(
 
     unique_places = (
         df.groupby("Full Location", sort=False)
-        .agg(
-            City=("City", "first"),
-            State=("State", "first"),
-            SourceLat=("SourceLat", "first"),
-            SourceLon=("SourceLon", "first"),
-        )
+        .agg(City=("City", "first"), State=("State", "first"))
         .reset_index()
     )
+    # A town's coordinates are a pair from one row: "first" per column could take the
+    # latitude of one row and the longitude of another. No complete row means NA, so
+    # the town is geocoded.
+    complete = df[df["SourceLat"].notna() & df["SourceLon"].notna()]
+    pairs = complete.drop_duplicates("Full Location")[["Full Location", "SourceLat", "SourceLon"]]
+    unique_places = unique_places.merge(pairs, on="Full Location", how="left")
     has_coords = unique_places["SourceLat"].notna() & unique_places["SourceLon"].notna()
     total_places = len(unique_places)
     print(
