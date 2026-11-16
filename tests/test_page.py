@@ -292,3 +292,12 @@ def test_basemap_tiles_come_only_from_esri():
     for url in urls:
         assert url.startswith("ESRI + '"), url
     assert "ESRI + 'World_Street_Map/MapServer/tile/{z}/{y}/{x}'" in source
+
+
+def test_unassigned_region_defaults_off_in_source():
+    # The gray Unassigned dots start hidden: DEFAULTS.regionsOn is built from the payload's
+    # unassigned label, not from allOn(regionNames), which turned every region on
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    assert "regionsOn: allOn(regionNames)" not in source
+    default = "regionsOn: Object.fromEntries(regionNames.map(n => [n, n !== D.unassignedLabel]))"
+    assert default + "," in source

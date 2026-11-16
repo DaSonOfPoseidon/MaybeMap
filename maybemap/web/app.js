@@ -25,7 +25,9 @@ const DEFAULTS = {
   zoneOpacity: 'medium',
   buckets: D.buckets.map(() => true),
   mix: allOn(D.serviceTypes.map(t => t.key)),
-  regionsOn: allOn(regionNames),
+  // The Unassigned region (towns with no region) starts off: its gray dots stay hidden until
+  // the viewer turns its switch on. Every other region starts on
+  regionsOn: Object.fromEntries(regionNames.map(n => [n, n !== D.unassignedLabel])),
   routeMode: 'neighbors',
   routeCount: 1,
   techNames: true,
