@@ -286,6 +286,39 @@ def test_a_tie_with_no_name_in_the_region_goes_to_the_first_name(order):
     assert hubs == {"Zz Region": ("Zz Alpha", "MO")}
 
 
+def test_a_town_name_inside_a_longer_word_is_not_named_in_the_region():
+    # "Zzol" is a substring of "Zzolive" but not a word of it, so the tie goes to the
+    # first name (Zz Alpha sorts before Zzol)
+    region = "Zzolive-Zzlebanon"
+    towns = [_town(0, "Zzol", region, 40), _town(1, "Zz Alpha", region, 40)]
+    assert payload.region_hubs(towns).hubs == {region: ("Zz Alpha", "MO")}
+    # The same town, spelled as a whole word of the region, does win the tie
+    region = "Zzol-Zzlebanon"
+    towns = [_town(0, "Zzol", region, 40), _town(1, "Zz Alpha", region, 40)]
+    assert payload.region_hubs(towns).hubs == {region: ("Zzol", "MO")}
+
+
+@pytest.mark.parametrize(
+    "name, region",
+    [
+        ("Zz Lake Ozark", "Zz Lake Ozark Area"),  # a multi-word town, at the start
+        ("Zz Lake Ozark", "Region of zz lake ozark"),  # at the end, other case
+        ("Zz St. Paul", "Zz St. Paul-Other"),  # regex metacharacters in the name
+    ],
+)
+def test_a_whole_word_town_name_in_the_region_breaks_the_tie(name, region):
+    # Zz Aaa sorts first, so only a name match can give the tie to the other town
+    towns = [_town(0, "Zz Aaa", region, 40), _town(1, name, region, 40)]
+    assert payload.region_hubs(towns).hubs == {region: (name, "MO")}
+
+
+def test_a_dot_in_a_town_name_is_not_a_wildcard():
+    # "Zz St. Paul" as a pattern would also match "Zz St, Paul" if the dot were unescaped
+    region = "Zz St, Paul"
+    towns = [_town(0, "Zz Aaa", region, 40), _town(1, "Zz St. Paul", region, 40)]
+    assert payload.region_hubs(towns).hubs == {region: ("Zz Aaa", "MO")}
+
+
 def test_the_name_in_the_region_only_breaks_a_tie():
     # Zz Beta is named in the region, but Zz Alpha has more customers
     region = "Zz Beta-Zz Gamma"
@@ -298,6 +331,32 @@ def test_an_override_wins_over_the_counts():
     found = payload.region_hubs(towns, {"R": ("Zz Small", "MO")})
     assert found.hubs == {"R": ("Zz Small", "MO")}
     assert found.defaulted == set()
+
+
+def test_an_override_for_an_unknown_region_stops_the_build_and_names_it():
+    towns = [_town(0, "Zz Big", "Zz R", 90), _town(1, "Zz Small", "Zz R", 1)]
+    overrides = {"Zz Typo": ("Zz Big", "MO"), "Zz Other Typo": ("Zz Small", "MO")}
+    with pytest.raises(ValueError, match=r"region_hubs\.csv") as err:
+        payload.region_hubs(towns, overrides)
+    # Every unknown region is named, not only the first
+    assert "Zz Typo" in str(err.value) and "Zz Other Typo" in str(err.value)
+    with pytest.raises(ValueError, match="Zz Typo"):
+        payload.build_places(towns, _techs(("Zz Ada", "Zz Big", "MO", "Zz R")), overrides)
+
+
+def test_an_override_region_is_compared_exactly_like_every_other_region():
+    # Regions are matched as written (the files strip the edges, nothing else), so a
+    # different case is a different region and is reported
+    towns = [_town(0, "Zz Big", "Zz R", 90), _town(1, "Zz Small", "Zz R", 1)]
+    with pytest.raises(ValueError, match="zz r"):
+        payload.region_hubs(towns, {"zz r": ("Zz Small", "MO")})
+
+
+def test_an_override_for_a_region_with_only_unregioned_towns_is_unknown():
+    town = _town(0, "Zz Loose", "Unassigned", 9)
+    town["regioned"] = False
+    with pytest.raises(ValueError, match="Unassigned"):
+        payload.region_hubs([town], {"Unassigned": ("Zz Loose", "MO")})
 
 
 def test_an_override_resolves_a_region_with_no_counts():
@@ -364,6 +423,25 @@ def test_a_region_with_no_counts_raises_only_when_a_tech_needs_it():
     # An override row fixes it
     roster = payload.build_places(towns, needs, {dead: ("Zz One", "MO")})
     assert _placed_at(roster, 1) == "Zz One"
+
+
+def test_an_override_hub_that_cannot_be_geocoded_names_the_hubs_file_and_region(monkeypatch):
+    monkeypatch.setattr(payload, "geocode_city_state", lambda town, state: None)
+    towns = [_town(0, "Zz Big", "Zz R", 90)]
+    techs = _techs(("Zz Ada", "", "", "Zz R"))
+    with pytest.raises(ValueError, match=r"Zz Nowhere.*Zz R.*region_hubs\.csv") as err:
+        payload.build_places(towns, techs, {"Zz R": ("Zz Nowhere", "MO")})
+    assert "tech_info.csv" not in str(err.value)
+
+
+def test_a_techs_own_town_that_cannot_be_geocoded_still_names_the_tech_file(monkeypatch):
+    monkeypatch.setattr(payload, "geocode_city_state", lambda town, state: None)
+    towns = [_town(0, "Zz Big", "Zz R", 90)]
+    # An override exists for the tech's region, but the tech has a town of their own
+    techs = _techs(("Zz Ada", "Zz Nowhere", "MO", "Zz R"))
+    with pytest.raises(ValueError, match=r"Zz Nowhere.*Zz Ada.*tech_info\.csv") as err:
+        payload.build_places(towns, techs, {"Zz R": ("Zz Big", "MO")})
+    assert "region_hubs.csv" not in str(err.value)
 
 
 def test_a_tech_with_a_town_does_not_need_its_regions_hub():

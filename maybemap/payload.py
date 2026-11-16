@@ -1,6 +1,7 @@
 # Assembles everything the page draws into one JSON-serialisable dict. The page
 # itself holds no data of its own: every layer reads from this.
 
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import NamedTuple
@@ -142,18 +143,34 @@ class RegionHubs(NamedTuple):
     unresolved: set[str]  # regions with no counted town and no override
 
 
+def _named_in(name: str, region: str) -> bool:
+    # The town's name as a whole word of the region's name: bounded by a character that
+    # is not a letter or digit, or by either end, so "Ash" is not in "Nashville-Lebanon".
+    pattern = rf"(?<![^\W_]){re.escape(name)}(?![^\W_])"
+    return re.search(pattern, region, re.IGNORECASE) is not None
+
+
 def region_hubs(
     cities: list[dict], overrides: dict[str, tuple[str, str]] | None = None
 ) -> RegionHubs:
     # Each region's hub is its member town with the most customers. A town with no
-    # count is skipped. Ties go to a town whose name appears in the region's name,
-    # then to the name first in order. An override row wins over all of that. A
-    # region with no counted town and no override has no hub, and is reported apart.
+    # count is skipped. Ties go to a town whose name is a whole word of the region's name,
+    # then to the name first in order. An override row wins over all of that, and one
+    # for a region the export doesn't have is an error. A region with no counted town
+    # and no override has no hub, and is reported apart.
     overrides = overrides or {}
     by_region: dict[str, list[dict]] = {}
     for c in cities:
         if c["regioned"]:
             by_region.setdefault(c["region"], []).append(c)
+    # Regions are compared as written, here as everywhere else. A Region that matches none
+    # is a typo in the operator's file, so it stops the build instead of being dropped.
+    unknown = sorted(r for r in overrides if r not in by_region)
+    if unknown:
+        raise ValueError(
+            f"{REGION_HUBS_PATH.name} has a Region that is not a region in the export: "
+            f"{', '.join(unknown)}. Fix the spelling or remove the row."
+        )
     hubs = dict(overrides)
     defaulted, unresolved = set(), set()
     for region, towns in by_region.items():
@@ -165,7 +182,7 @@ def region_hubs(
             continue
         top = max(t["customers"] for t in counted)
         tied = [t for t in counted if t["customers"] == top]
-        named = [t for t in tied if t["name"].lower() in region.lower()]
+        named = [t for t in tied if _named_in(t["name"], region)]
         hub = min(named or tied, key=lambda t: t["name"])
         hubs[region] = (hub["name"], hub["state"])
         defaulted.add(region)
@@ -211,6 +228,7 @@ def build_places(
     for row in techs.itertuples(index=False):
         if row.Town and row.State:
             key, basis = (row.Town, row.State), "town"
+            fix = f"tech {row.Tech}. Check the spelling in {DISPATCH_TECHS_PATH.name}."
         elif (region := _hub_region(row.Region, found)) is not None:
             if region in found.unresolved:
                 raise ValueError(
@@ -219,6 +237,11 @@ def build_places(
                     f"{REGION_HUBS_PATH.name}: Region,Hub,State."
                 )
             key, basis = found.hubs[region], "region"
+            # Only an override row can name a town outside the export, so only it is geocoded
+            fix = (
+                f"the hub of region {region} (tech {row.Tech}). "
+                f"Check the spelling in {REGION_HUBS_PATH.name}."
+            )
             if region != row.Region:
                 print(f"Tech {row.Tech} lists several regions; placed by the first, {region}")
             if region in found.defaulted:
@@ -233,10 +256,7 @@ def build_places(
             else:
                 res = geocode_city_state(*key)
                 if not res:
-                    raise ValueError(
-                        f"Could not geocode {key[0]}, {key[1]} for tech {row.Tech}. "
-                        f"Check the spelling in {DISPATCH_TECHS_PATH.name}."
-                    )
+                    raise ValueError(f"Could not geocode {key[0]}, {key[1]} for {fix}")
                 add(*key, round(res["lat"], 5), round(res["lon"], 5), None)
             added.append(f"{key[0]}, {key[1]}")
         places[index[key]]["techs"].append(len(out))
