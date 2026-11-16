@@ -129,7 +129,7 @@ def test_scattered_misses_are_tolerated(monkeypatch, spreadsheet, seeded_cache):
 
     seen = []
 
-    def sometimes(city, state, pt, progress="", county=""):
+    def sometimes(city, state, pt, progress="", county="", use_overpass=True):
         seen.append(city)
         return None if len(seen) % 2 else Point(-92.5, 38.9).buffer(0.05)
 
@@ -191,15 +191,74 @@ def test_a_municipality_is_accepted_by_place_rank_when_untyped(monkeypatch):
     assert _fetch().symmetric_difference(BOUNDARY).area < 1e-9
 
 
-def test_an_overpass_outage_stops_the_run(monkeypatch):
-    # Swallowed, the outage became None, and the caller cached None as "this town
-    # has no boundary" -- a dot forever, from one bad minute of network
+def test_an_overpass_outage_is_reported_as_the_fallback_being_unavailable(monkeypatch):
+    # Not None: the caller would cache None as "this town has no boundary", a dot
+    # forever from one bad minute of network. A distinct error lets it tell apart.
     def boom(*args, **kwargs):
         raise requests.ConnectionError("Connection refused")
 
     monkeypatch.setattr(geocoding.ox, "features_from_point", boom)
-    with pytest.raises(RuntimeError, match="Overpass request for Nowhere, Missouri failed"):
+    with pytest.raises(geocoding.FallbackUnavailable, match="Overpass request for Nowhere"):
         _fetch()
+
+
+def test_a_known_outage_skips_overpass_without_waiting(monkeypatch):
+    # Each Overpass attempt can wait out its timeouts and retries, about 105 s, so
+    # once it is down for this build the later towns don't ask it again
+    def never(*args, **kwargs):
+        raise AssertionError("Overpass was asked")
+
+    monkeypatch.setattr(geocoding.ox, "features_from_point", never)
+    with pytest.raises(geocoding.FallbackUnavailable, match="unreachable earlier"):
+        geocoding.fetch_osm_city_polygon("Nowhere", "MO", POINT, use_overpass=False)
+
+
+def test_a_nominatim_outage_is_not_mistaken_for_a_fallback_outage(monkeypatch):
+    def boom(*args, **kwargs):
+        raise requests.ConnectionError("Connection refused")
+
+    monkeypatch.setattr(geocoding.ox, "geocode_to_gdf", boom)
+    with pytest.raises(RuntimeError) as err:
+        _fetch()
+    assert not isinstance(err.value, geocoding.FallbackUnavailable)
+
+
+def test_overpass_requests_are_capped(monkeypatch):
+    # The library default waits 180s per request; an overloaded public Overpass
+    # then held one town for up to 18 minutes
+    from maybemap.config import OSM_REQUEST_TIMEOUT_S
+
+    assert geocoding.ox.settings.requests_timeout == OSM_REQUEST_TIMEOUT_S <= 30
+
+
+def test_an_unavailable_fallback_draws_a_dot_for_this_build_only(
+    monkeypatch, spreadsheet, seeded_cache, capsys
+):
+    from maybemap.sources import cities
+
+    asked_overpass = []
+
+    def down(city, *a, use_overpass=True, **k):
+        asked_overpass.append(use_overpass)
+        raise geocoding.FallbackUnavailable(f"Overpass request for {city} failed")
+
+    cached = []
+    monkeypatch.setattr(cities, "OSM_MAX_CONSECUTIVE_FALLBACKS", 2)
+    monkeypatch.setattr(cities, "get_cached_osm_polygon", lambda *a, **k: geocoding.NOT_CACHED)
+    monkeypatch.setattr(cities, "fetch_osm_city_polygon", down)
+    monkeypatch.setattr(cities, "cache_osm_polygon", lambda *a: cached.append(a))
+    points, _ = cities.load_city_points(spreadsheet)
+
+    # Every town's fallback is down, yet the build goes on: these are not misses
+    boundaries = cities.load_city_boundaries(points)
+    assert boundaries.geometry.isna().all()
+    assert cached == []
+    out = capsys.readouterr().out
+    assert "Kansas City" in out
+    # The summary counts them as dots too, matching the warning above it
+    assert f"0 with real boundaries and {len(points)} kept as dots" in out
+    # Only the first town waits on Overpass; the rest skip straight to a dot
+    assert asked_overpass == [True] + [False] * (len(points) - 1)
 
 
 def test_the_county_disambiguates_a_shared_name(monkeypatch):
@@ -374,7 +433,7 @@ def test_scattered_misses_are_cached_once_the_run_finishes(monkeypatch, spreadsh
     cached = {}
     seen = []
 
-    def sometimes(city, state, pt, progress="", county=""):
+    def sometimes(city, state, pt, progress="", county="", use_overpass=True):
         seen.append(city)
         return None if len(seen) % 2 else Point(-92.5, 38.9).buffer(0.05)
 

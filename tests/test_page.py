@@ -109,3 +109,16 @@ def test_atomic_write_creates_folders(tmp_path):
     from maybemap import files
 
     assert files.write_text_atomic(tmp_path / "x" / "y.txt", "ok").read_text() == "ok"
+
+
+def test_department_changes_refresh_the_open_card():
+    # The town card lists nearest technicians, which the department filter decides,
+    # but update() leaves the card alone, so every handler that flips a department
+    # has to re-render it as well
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    writes = [
+        line for line in source.splitlines() if re.search(r"state\.depts\[[^\]]+\]\s*=", line)
+    ]
+    assert writes, "no department handler found in app.js"
+    for line in writes:
+        assert "renderCard()" in line, line

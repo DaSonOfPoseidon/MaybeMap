@@ -21,6 +21,7 @@ from maybemap.config import (
     MAX_CANDIDATE_AREA_M2,
     OSM_FETCH_RETRIES,
     OSM_FETCH_RETRY_PAUSE_S,
+    OSM_REQUEST_TIMEOUT_S,
     PROJECT_ROOT,
     SEARCH_RADIUS_M,
 )
@@ -33,6 +34,16 @@ load_dotenv(PROJECT_ROOT / ".env")
 ox.settings.use_cache = True
 ox.settings.cache_folder = str(CACHE_DIR / "osmnx")
 ox.settings.log_console = False
+ox.settings.requests_timeout = OSM_REQUEST_TIMEOUT_S
+
+
+class FallbackUnavailable(RuntimeError):
+    # Overpass, the fallback for towns Nominatim cannot name-match, could not be
+    # reached. Unlike a failed Nominatim lookup this does not end the build: the
+    # town is drawn as a dot this once, nothing is cached, and the next build asks
+    # again.
+    pass
+
 
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "MaybeMap/1.0"})
@@ -297,17 +308,32 @@ def _boundary_from_overpass(city: str, state: str, pt_3857):
 
 
 def fetch_osm_city_polygon(
-    city: str, state: str, pt_3857, progress_info: str = "", county: str = ""
+    city: str,
+    state: str,
+    pt_3857,
+    progress_info: str = "",
+    county: str = "",
+    *,
+    use_overpass: bool = True,
 ):
+    # use_overpass=False: Overpass already failed this build, and every further
+    # attempt would wait out its timeouts and retries again before failing
     print(f"Fetching OSM boundary: {city}, {state} {progress_info}")
 
     geom_ll = _boundary_from_nominatim(city, state, county)
     source = "Nominatim"
+    if geom_ll is None and not use_overpass:
+        raise FallbackUnavailable(
+            f"Overpass skipped for {city}, {state}: it was unreachable earlier this build"
+        )
     if geom_ll is None:
         # An Overpass outage raises out of here rather than becoming None: the
         # caller caches None as "no boundary", which would keep the town a dot
         # long after the network came back
-        geom_ll = _boundary_from_overpass(city, state, pt_3857)
+        try:
+            geom_ll = _boundary_from_overpass(city, state, pt_3857)
+        except RuntimeError as exc:
+            raise FallbackUnavailable(str(exc)) from exc
         source = "Overpass"
     if geom_ll is None:
         return None

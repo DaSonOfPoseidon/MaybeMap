@@ -111,6 +111,11 @@ button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-vis
 .rowentry .value{text-align:right;white-space:nowrap}
 .rowentry .value small{display:block}
 .rowentry a{color:#126b9c;text-decoration:none;font-size:10px}
+.tech-list{display:grid;gap:5px;margin:4px 0 6px}
+.tech-row{background:#fff;border:1px solid #f0d9b5;border-left:4px solid var(--orange);border-radius:8px;padding:7px 10px}
+.tech-row b{display:block;font-size:13px;color:#9b5600}
+.tech-row small{font-size:11px;color:#62798b}
+.tech-row.off{opacity:.5}
 textarea{width:100%;border:1px solid #bbcdd9;border-radius:8px;background:#fff;padding:10px 11px;resize:vertical;min-height:96px;line-height:1.45;color:#20384b}
 .save-state{min-height:18px;color:#567184;font-size:11px;margin:6px 0 0}
 .btnrow{display:flex;gap:8px;flex-wrap:wrap}

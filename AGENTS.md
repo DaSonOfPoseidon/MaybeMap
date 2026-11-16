@@ -29,7 +29,10 @@ or anything CI already checks (formatting, lints, tests).
   `cache/` and `output/`. `.env` (API keys) never gets committed either.
 - **A failed lookup is not an empty answer.** A network failure from Geoapify, Nominatim,
   Overpass or OSRM must never be cached, or drawn, as "no boundary", "no route" or "no
-  coordinates". Retry, then fail the build loudly.
+  coordinates". Retry, then fail the build loudly. The one exception is the Overpass
+  boundary fallback, used only for towns Nominatim can't match. When it's unreachable,
+  that town is drawn as a dot for this build only, nothing is cached, and the build warns
+  by name.
 - **The built map is complete or not written.** The drive-time matrix has no holes, and the
   inlined payload is strict JSON (no `NaN`, `</` escaped). The page makes no routing or data
   requests at view time; only Leaflet (pinned version and SRI) and basemap tiles load from
