@@ -78,7 +78,11 @@ that captured it.
 **Check:** any message built from a request exception for a keyed service has the key
 replaced, and it is not chained with `from exc` (the traceback would print the original).
 
-**Where:** the pre-push gate, filed as #5 (`geoapify_forward`).
+The key is quoted in the URL's encoded form too: a `+`, `/`, `=` or space in it becomes `%2B`,
+`%2F`, `%3D` or `+`, and a plain `replace(key, ...)` misses that. Redact every form
+(`_redact`: raw, `quote`, `quote_plus`, `urlencode`), and test with a key that encoding changes.
+
+**Where:** the pre-push gate, filed as #5 (`geoapify_forward`), and #16 for the encoded forms.
 
 ## A spy test that never sees the path it claims to cover
 

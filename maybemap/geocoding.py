@@ -5,6 +5,7 @@ import json
 import os
 import re
 import time
+from urllib.parse import quote, quote_plus, urlencode
 
 import geopandas as gpd
 import osmnx as ox
@@ -100,6 +101,20 @@ def _require_api_key() -> str:
     return key
 
 
+def _redact(text: str, key: str) -> str:
+    # requests quotes the URL it built, so the key can appear raw or percent-encoded
+    # (a "+", "/", "=" or space in it is rewritten). Replace every form it can take.
+    forms = {
+        key,
+        quote(key, safe=""),
+        quote_plus(key),
+        urlencode({"k": key})[2:],
+    }
+    for form in sorted(filter(None, forms), key=len, reverse=True):
+        text = text.replace(form, "<redacted>")
+    return text
+
+
 def geoapify_forward(text: str, *, retries: int = 3, backoff: float = 0.8):
     # None means Geoapify answered and found nothing. A request that never got an
     # answer -- network error, rate limit, server error -- raises instead, so the
@@ -131,7 +146,7 @@ def geoapify_forward(text: str, *, retries: int = 3, backoff: float = 0.8):
                 }
         except requests.RequestException as exc:
             # requests quotes the full URL, apiKey included, in its messages
-            problem = f"{type(exc).__name__}: {exc}".replace(key, "<redacted>")
+            problem = _redact(f"{type(exc).__name__}: {exc}", key)
         if attempt < retries:
             time.sleep(backoff * attempt)
     raise RuntimeError(
