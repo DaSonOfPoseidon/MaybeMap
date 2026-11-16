@@ -58,8 +58,9 @@ def _title_case(series: pd.Series) -> pd.Series:
 
 def _load_sheet(path: Path) -> pd.DataFrame:
     if path.suffix.lower() == ".csv":
-        # dtype=str keeps ZIP-like and numeric-looking place names intact
-        return pd.read_csv(path, dtype=str)
+        # dtype=str keeps ZIP-like and numeric-looking place names intact; utf-8-sig
+        # also reads the byte-order mark Excel writes for "CSV UTF-8"
+        return pd.read_csv(path, dtype=str, encoding="utf-8-sig")
     return pd.read_excel(path, engine="openpyxl")
 
 

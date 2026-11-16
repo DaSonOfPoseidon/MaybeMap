@@ -19,7 +19,7 @@ INACTIVE = {"n", "no", "false", "0", "inactive"}
 
 
 def _read(path: Path, required: list[str], optional: dict[str, str] | None = None):
-    df = pd.read_csv(path, dtype=str).fillna("")
+    df = pd.read_csv(path, dtype=str, encoding="utf-8-sig").fillna("")
     df.columns = [c.strip() for c in df.columns]
     lower = {c.lower(): c for c in df.columns}
     missing = [c for c in required if c.lower() not in lower]

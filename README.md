@@ -42,8 +42,9 @@ two are rebuilt by the build. Deleting `cache/` is safe; the next build just tak
 | `tech_info.csv` | The MBS techs query: `Tech, Town, State, Active, Tech ID, Primary Region, Departments`. Town may be blank (see below), but a Town needs its State: a Town with no State stops the build and names the row. Rows with `Active` = N are skipped. A plain `Tech, Town, State` roster also works. |
 | `dispatch_staging.csv` | `Type, Town, State`: one row per staging site. Each Type becomes its own switch. |
 
-Column names are matched case-insensitively. The roster CSVs are optional; without them
-the dispatch layer routes town to town with no techs, and there is no staging section.
+Column names are matched case-insensitively, and CSVs may be plain UTF-8 or Excel's
+"CSV UTF-8". The roster CSVs are optional; without them the dispatch layer routes town to
+town with no techs, and there is no staging section.
 
 A town with `Latitude`/`Longitude` in the export is placed exactly there. A town without
 them, or with impossible or 0 values, is geocoded instead. Geocoding a town the cache has not

@@ -5,9 +5,9 @@ import pytest
 from maybemap.sources.dispatch import load_staging, load_techs
 
 
-def _csv(tmp_path, text, name="roster.csv"):
+def _csv(tmp_path, text, name="roster.csv", encoding="utf-8"):
     path = tmp_path / name
-    path.write_text(text)
+    path.write_text(text, encoding=encoding)
     return path
 
 
@@ -15,6 +15,18 @@ def test_techs_normalize_to_the_city_export_form(tmp_path):
     df = load_techs(_csv(tmp_path, "tech,town,state\n Robin ,SEDALIA,Missouri\n"))
     row = df.to_dict("records")[0]
     assert (row["Tech"], row["Town"], row["State"]) == ("Robin", "Sedalia", "MO")
+
+
+def test_a_csv_saved_with_a_bom_loads(tmp_path):
+    # Excel's "CSV UTF-8" puts a byte-order mark in front of the first header
+    techs = load_techs(_csv(tmp_path, "Tech,Town,State\nRobin,Sedalia,MO\n", encoding="utf-8-sig"))
+    assert techs["Tech"].tolist() == ["Robin"]
+    staging = load_staging(
+        _csv(tmp_path, "Type,Town,State\nHub,Sedalia,MO\n", "staging.csv", encoding="utf-8-sig")
+    )
+    assert staging["Type"].tolist() == ["Hub"]
+    # A header-only file loads empty rather than failing the header check
+    assert load_techs(_csv(tmp_path, "Tech,Town,State\n", "empty.csv", encoding="utf-8-sig")).empty
 
 
 def test_blank_rows_are_skipped(tmp_path):

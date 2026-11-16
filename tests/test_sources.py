@@ -31,6 +31,15 @@ def test_the_two_formats_agree(spreadsheet, city_csv):
     )
 
 
+def test_a_csv_saved_with_a_bom_loads(tmp_path, city_csv):
+    # Excel's "CSV UTF-8" puts a byte-order mark in front of the first header
+    plain = cities._read_frame(city_csv, unassigned_label=None)
+    bom = tmp_path / "bom.csv"
+    bom.write_text(city_csv.read_text(encoding="utf-8"), encoding="utf-8-sig")
+    assert bom.read_bytes().startswith(b"\xef\xbb\xbf")
+    pd.testing.assert_frame_equal(cities._read_frame(bom, unassigned_label=None), plain)
+
+
 @pytest.mark.parametrize("region_column", ["Region", "Region Name", "Group"])
 def test_the_region_column_is_matched_under_any_of_its_names(tmp_path, region_column):
     df = _frame(
