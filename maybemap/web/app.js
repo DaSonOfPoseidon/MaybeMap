@@ -932,6 +932,33 @@ function csvParse(s) {
   if (fields.some(v => v.trim() !== '')) rows.push(fields);
   return rows;
 }
+// Merges a parsed notes CSV (header row first) into updates for the given town keys ("Name|ST").
+// A blank or missing Notes cell is skipped, so it never erases a saved note. A name with no state
+// that matches more than one key is skipped and reported, not guessed.
+function importNotes(table, keys) {
+  if (!table.length) throw new Error('Expected Town and Notes columns');
+  const head = table[0].map(h => h.trim().toLowerCase());
+  // "Market" is the column the old dispatch map exported, so its backups import too
+  const ti = head.indexOf('town') >= 0 ? head.indexOf('town') : head.indexOf('market');
+  const si = head.indexOf('state'), ni = head.indexOf('notes');
+  if (ti < 0 || ni < 0) throw new Error('Expected Town and Notes columns');
+  const updates = {}, ambiguous = [];
+  let imported = 0, skippedBlank = 0;
+  for (const cells of table.slice(1)) {
+    const raw = String(cells[ni] ?? '');
+    if (!raw.trim()) { skippedBlank++; continue; }
+    const shown = String(cells[ti] || '').trim();
+    const name = shown.toLowerCase();
+    const st = si >= 0 ? String(cells[si] || '').trim().toUpperCase() : '';
+    const hits = keys.filter(k => { const [n, s] = k.split('|'); return n.toLowerCase() === name && (!st || s === st); });
+    if (hits.length > 1) {
+      if (!ambiguous.some(a => a.toLowerCase() === name)) ambiguous.push(shown);
+      continue;
+    }
+    if (hits.length === 1) { updates[hits[0]] = unguardFormula(raw); imported++; }
+  }
+  return { updates, imported, skippedBlank, ambiguous };
+}
 function download(text, name) {
   const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
   const a = el('a'); a.href = url; a.download = name;
@@ -952,24 +979,17 @@ $('#notesImportInput').addEventListener('change', async e => {
   const f = e.target.files && e.target.files[0];
   if (!f) return;
   try {
-    const table = csvParse((await f.text()).replace(/^﻿/, ''));
-    const head = table.shift().map(h => h.trim().toLowerCase());
-    // "Market" is the column the old dispatch map exported, so its backups import too
-    const ti = head.indexOf('town') >= 0 ? head.indexOf('town') : head.indexOf('market');
-    const si = head.indexOf('state'), ni = head.indexOf('notes');
-    if (ti < 0 || ni < 0) throw new Error('Expected Town and Notes columns');
-    let imported = 0;
-    for (const cells of table) {
-      const name = String(cells[ti] || '').trim().toLowerCase();
-      const st = si >= 0 ? String(cells[si] || '').trim().toUpperCase() : '';
-      const key = allKeys.find(k => { const [n, s] = k.split('|'); return n.toLowerCase() === name && (!st || s === st); });
-      if (key) { notes[key] = unguardFormula(String(cells[ni] || '')); imported++; }
-    }
+    const { updates, imported, skippedBlank, ambiguous } = importNotes(csvParse((await f.text()).replace(/^﻿/, '')), allKeys);
+    Object.assign(notes, updates);
     writeStore(NOTES_KEY, notes);
     renderCard();
     renderPins();
     renderDirectory();
-    alert('Imported notes for ' + imported + ' towns.');
+    // CSV text goes into the alert as plain text, never into markup
+    let msg = 'Imported notes for ' + imported + ' towns.';
+    if (skippedBlank) msg += '\nSkipped ' + skippedBlank + ' rows with a blank Notes cell.';
+    if (ambiguous.length) msg += '\nAdd a State column for: ' + ambiguous.join(', ');
+    alert(msg);
   } catch (err) {
     alert('Could not import notes: ' + err.message);
   } finally {

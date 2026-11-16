@@ -134,3 +134,16 @@ about a bad value: it names the file the value came from (a hub's town is in `re
 tech's own town is in `tech_info.csv`), not the one the code happened to be reading.
 
 **Where:** issues #37 and #38, found by the pre-push gate on PR #39.
+
+## An import that guesses or overwrites instead of skipping
+
+The notes import took the first same-name town when a row had no State, and wrote a blank Notes
+cell over the note already saved for that town (counting it as imported). An empty file also
+crashed on the header read instead of saying what was expected.
+
+**Check:** an import row is applied only when it names exactly one target and carries a value. A
+blank or missing value never overwrites saved data, and a name that matches several targets is
+skipped and listed in the result, not guessed. Empty input gets the same message as a wrong
+header. Text from the file reaches the user only as plain alert text.
+
+**Where:** issues #46, #47 and #48 (`importNotes`).

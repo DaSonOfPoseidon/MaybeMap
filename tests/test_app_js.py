@@ -19,6 +19,7 @@ NAMES = (
     "unguardFormula",
     "escapeCSV",
     "csvParse",
+    "importNotes",
     "matchPlaces",
     "closestTechs",
     "outsideService",
@@ -76,6 +77,102 @@ def test_every_note_survives_export_then_import():
         f"{json.dumps(NOTES)}.map(n => unguardFormula(csvParse('h\\r\\n' + escapeCSV(n))[1][0]))"
     )
     assert back == NOTES
+
+
+KEYS = ["Zzone|ZZ", "Zztwin|ZZ", "Zztwin|YY"]
+
+
+def _import(table, keys=KEYS):
+    return _run(f"importNotes({json.dumps(table)}, {json.dumps(keys)})")
+
+
+def test_import_notes_throws_on_an_empty_table():
+    with pytest.raises(subprocess.CalledProcessError) as err:
+        _import([])
+    assert "Expected Town and Notes columns" in err.value.stderr
+
+
+def test_import_notes_throws_without_a_notes_column():
+    with pytest.raises(subprocess.CalledProcessError) as err:
+        _import([["Town", "State"], ["Zzone", "ZZ"]])
+    assert "Expected Town and Notes columns" in err.value.stderr
+
+
+def test_import_notes_takes_a_non_blank_cell():
+    out = _import([["Town", "State", "Notes"], ["zzone", "zz", "Call ahead"]])
+    assert out["updates"] == {"Zzone|ZZ": "Call ahead"}
+    assert out["imported"] == 1
+    assert out["skippedBlank"] == 0
+
+
+def test_import_notes_skips_a_blank_cell_and_does_not_count_it():
+    table = [["Town", "State", "Notes"], ["Zzone", "ZZ", " \t "], ["Zztwin", "YY", "Gate code"]]
+    out = _import(table)
+    assert out["updates"] == {"Zztwin|YY": "Gate code"}
+    assert out["imported"] == 1
+    assert out["skippedBlank"] == 1
+
+
+def test_import_notes_skips_a_missing_cell():
+    out = _import([["Town", "State", "Notes"], ["Zzone", "ZZ"]])
+    assert out["updates"] == {}
+    assert out["imported"] == 0
+    assert out["skippedBlank"] == 1
+
+
+def test_import_notes_takes_a_unique_name_with_no_state_column():
+    out = _import([["Town", "Notes"], ["Zzone", "Hello"]])
+    assert out["updates"] == {"Zzone|ZZ": "Hello"}
+    assert out["ambiguous"] == []
+
+
+def test_import_notes_skips_an_ambiguous_name_and_reports_it_once():
+    table = [["Town", "Notes"], ["Zztwin", "One"], ["ZZTWIN", "Two"], ["Zzone", "Three"]]
+    out = _import(table)
+    assert out["updates"] == {"Zzone|ZZ": "Three"}
+    assert out["imported"] == 1
+    assert out["ambiguous"] == ["Zztwin"]
+
+
+def test_import_notes_skips_an_ambiguous_name_with_a_blank_state():
+    out = _import([["Town", "State", "Notes"], ["Zztwin", " ", "One"]])
+    assert out["updates"] == {}
+    assert out["ambiguous"] == ["Zztwin"]
+
+
+def test_import_notes_matches_the_given_state_for_an_ambiguous_name():
+    out = _import([["Town", "State", "Notes"], ["Zztwin", "YY", "One"]])
+    assert out["updates"] == {"Zztwin|YY": "One"}
+    assert out["ambiguous"] == []
+
+
+def test_import_notes_does_not_report_a_blank_ambiguous_row():
+    out = _import([["Town", "Notes"], ["Zztwin", ""]])
+    assert out["ambiguous"] == []
+    assert out["skippedBlank"] == 1
+
+
+def test_import_notes_ignores_an_unknown_town():
+    out = _import([["Town", "State", "Notes"], ["Zznowhere", "ZZ", "x"]])
+    assert out["updates"] == {}
+    assert out["imported"] == 0
+
+
+def test_import_notes_reads_the_old_market_header():
+    out = _import([[" Market ", "Notes"], ["Zzone", "Old backup"]])
+    assert out["updates"] == {"Zzone|ZZ": "Old backup"}
+
+
+def test_import_notes_still_unguards_a_formula_cell():
+    out = _import([["Town", "State", "Notes"], ["Zzone", "ZZ", "'=SUM(A1)"]])
+    assert out["updates"] == {"Zzone|ZZ": "=SUM(A1)"}
+
+
+def test_import_notes_does_not_change_its_input():
+    table = [["Town", "Notes"], ["Zzone", "Hi"]]
+    t, keys = json.dumps(table), json.dumps(KEYS)
+    expr = f"(() => {{ const t = {t}; importNotes(t, {keys}); return t; }})()"
+    assert _run(expr) == table
 
 
 PLACES = [
