@@ -448,3 +448,18 @@ def test_the_old_stats_strip_and_filler_copy_are_gone():
     ):
         assert gone not in html, gone
     assert "$('#subtitle').textContent = 'Updated ' + D.builtAt;" in source
+
+
+def test_initial_fit_padding_leaves_room_on_a_landscape_phone():
+    # The header sits above #map, not over it, so the first fit needs no room for it.
+    # A 375px-tall phone in landscape leaves #map about 130px (57vh minus the
+    # 84px header); padding that eats more than that gives Leaflet a negative
+    # fit height and the page stops before the layers are built
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    fits = re.findall(r"map\.fitBounds\(startBounds,\s*\{([^}]*)\}", source)
+    assert fits, "no initial fitBounds found in app.js"
+    for options in fits:
+        vertical = 0
+        for key, y in re.findall(r"(padding\w*)\s*:\s*\[\s*\d+\s*,\s*(\d+)\s*\]", options):
+            vertical += int(y) * (2 if key == "padding" else 1)
+        assert vertical <= 60, options

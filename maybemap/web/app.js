@@ -169,7 +169,7 @@ const BASEMAPS = {
 // Open on the zones: that is the territory, and towns outside it are context
 const zonesBounds = L.geoJSON(D.zones).getBounds();
 const startBounds = zonesBounds.isValid() ? zonesBounds : L.latLngBounds(cities.map(c => [c.lat, c.lon]));
-map.fitBounds(startBounds, { paddingTopLeft: [20, 140], paddingBottomRight: [20, 20] });
+map.fitBounds(startBounds, { padding: [20, 20] });
 
 // ---------- Zones ----------
 const OPACITY = { light: 0.18, medium: 0.32, strong: 0.5 };

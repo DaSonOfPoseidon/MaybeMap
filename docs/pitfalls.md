@@ -147,3 +147,16 @@ skipped and listed in the result, not guessed. Empty input gets the same message
 header. Text from the file reaches the user only as plain alert text.
 
 **Where:** issues #46, #47 and #48 (`importNotes`).
+
+## A layout change that leaves old offsets behind
+
+Moving UI off the map (a floating topbar became a header above `#map`) left the JS
+padding that reserved room for it. On a short landscape phone that padding was taller
+than the map itself, Leaflet got a negative fit height, and the page stopped before the
+layers were built.
+
+**Check:** when a panel moves, grep the JS for the pixel offsets that made room for it
+(`fitBounds` padding, popup and legend offsets), and check them against the smallest
+map the CSS allows (landscape phones included).
+
+**Where:** Codex on PR #62 (the initial `fitBounds` in `app.js`).
