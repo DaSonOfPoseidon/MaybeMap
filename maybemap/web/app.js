@@ -1018,6 +1018,20 @@ function update() {
   renderLegend();
   persist();
 }
+// The logo resets the map: every switch, filter and option back to its default, the open town, the
+// drive-time destination and the searches closed, and the starting view. What the viewer wrote and how
+// they arranged the sidebar (collapsed sections) are theirs, so they stay
+function resetMap() {
+  for (const k of Object.keys(DEFAULTS)) state[k] = structuredClone(DEFAULTS[k]);
+  driveToKey = null;
+  clearSelection();
+  $('#townFilter').value = '';
+  renderDirectory();
+  update();
+  map.fitBounds(startBounds, { padding: [20, 20] });
+  $('.sidebar').scrollTo({ top: 0 });
+}
+$('#resetMap').addEventListener('click', resetMap);
 $('#title').textContent = D.title;
-$('#subtitle').textContent = 'Updated ' + D.builtAt;
+$('#updated').textContent = 'Updated ' + D.builtAt;
 update();

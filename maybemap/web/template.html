@@ -14,10 +14,11 @@
 <div id="map" aria-label="Interactive service map"></div>
 
 <header class="appbar">
-  <div class="brand">
+  <button type="button" class="home" id="resetMap" aria-label="Reset the map" title="Reset the map">
     <img class="brand-logo" src="__LOGO__" alt="" hidden>
-    <div class="brand-text"><h1 id="title"></h1><div class="sub" id="subtitle"></div></div>
-  </div>
+    <svg class="home-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5M5.5 9.5V20h5v-6h3v6h5V9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <div class="brand-text"><h1 id="title"></h1></div>
   <div class="presets" role="group" aria-label="Layer presets">
     <button type="button" data-preset="territory">Territory</button>
     <button type="button" data-preset="coverage">Coverage</button>
@@ -173,9 +174,13 @@
       <input type="file" id="notesImportInput" accept=".csv,text/csv" hidden>
     </div>
   </section>
+
+  <footer class="sidebar-foot">
+    <div class="legend" id="legend"></div>
+    <div class="updated" id="updated"></div>
+  </footer>
 </aside>
 
-<div class="legend" id="legend"></div>
 
 <script type="application/json" id="map-data">__PAYLOAD__</script>
 <script>

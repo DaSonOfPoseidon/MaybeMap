@@ -13,17 +13,20 @@ path.leaflet-interactive:focus{outline:none}
 .leaflet-container:focus:not(:focus-visible){outline:none}
 [hidden]{display:none!important}
 
-#map{position:absolute;inset:var(--bar) 0 0 var(--side);background:#dfe3e8}
+#map{position:absolute;inset:var(--bar) var(--side) 0 0;background:#dfe3e8}
 
-/* Header bar: logo, title, build date, and the presets that flip layer switches */
-.appbar{position:absolute;z-index:1100;top:0;left:0;right:0;height:var(--bar);display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 16px;color:#fff;
+/* Header bar: the logo (it resets the map) on the left, the title centered, and the presets that flip
+   layer switches on the right. Equal outer columns keep the title on the page's center line */
+.appbar{position:absolute;z-index:1100;top:0;left:0;right:0;height:var(--bar);display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:16px;padding:0 16px;color:#fff;
   background:linear-gradient(90deg,var(--brand-dark),var(--brand-2));border-bottom:3px solid var(--accent)}
-.brand{display:flex;align-items:center;gap:14px;min-width:0}
-.brand-logo{height:30px;width:auto;flex:none}
-.brand-text{min-width:0}
+.home{justify-self:start;display:flex;align-items:center;padding:4px;margin-left:-4px;border:0;border-radius:4px;background:transparent;color:#fff;cursor:pointer}
+.home:hover{background:#ffffff1f}
+.home:focus-visible{outline-color:var(--accent)}
+.brand-logo{height:30px;width:auto;flex:none;display:block}
+.brand-logo:not([hidden])+.home-icon{display:none}
+.brand-text{min-width:0;text-align:center}
 .appbar h1{margin:0;font:700 22px/1.1 var(--head-font);letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.appbar .sub{font-size:11px;opacity:.8;margin-top:1px}
-.presets{display:flex;flex:none}
+.presets{display:flex;justify-self:end}
 .presets button{padding:6px 14px;font-size:13px;font-weight:600;border:1px solid #ffffff59;background:transparent;color:#fff;margin-left:-1px}
 .presets button:first-child{border-radius:4px 0 0 4px;margin-left:0}
 .presets button:last-child{border-radius:0 4px 4px 0}
@@ -32,7 +35,7 @@ path.leaflet-interactive:focus{outline:none}
 .presets button:focus-visible{outline-color:var(--accent)}
 
 /* Sidebar */
-.sidebar{position:absolute;z-index:1050;left:0;top:var(--bar);bottom:0;width:var(--side);background:var(--panel);border-right:1px solid var(--line);overflow:auto;scrollbar-color:#c3c8d2 transparent}
+.sidebar{position:absolute;z-index:1050;right:0;top:var(--bar);bottom:0;width:var(--side);display:flex;flex-direction:column;background:var(--panel);border-left:1px solid var(--line);overflow:auto;scrollbar-color:#c3c8d2 transparent}
 .section{padding:12px 16px;border-bottom:1px solid var(--line);position:relative}
 .section-title{display:block;margin:0 0 8px;font:700 17px/1.2 var(--head-font);color:var(--brand-dark);letter-spacing:.2px}
 .field-label{font-size:12px;font-weight:600;color:var(--muted);margin:12px 0 5px}
@@ -172,9 +175,13 @@ textarea{width:100%;border:1px solid var(--field);border-radius:4px;background:#
 .stage-flag{border:1px solid #fff9;border-radius:4px;color:#fff;font-weight:700;font-size:11px;line-height:1.18;white-space:nowrap;padding:5px 7px;display:inline-flex;align-items:center;gap:5px}
 .stage-flag .stage-mini{font-size:9px;border-radius:3px;background:#fff3;padding:1px 3px;min-width:22px;text-align:center}
 
-/* Legend: bottom-right of the map, above the attribution */
-.legend{position:absolute;z-index:700;bottom:26px;right:10px;max-width:min(460px,calc(100vw - var(--side) - 80px));border-radius:4px;background:#fffffff0;border:1px solid var(--line);box-shadow:0 1px 4px #0002;padding:7px 10px;font-size:11px;color:var(--ink);display:flex;flex-wrap:wrap;gap:4px 12px}
+/* Sidebar footer: the legend and the build's update stamp, held at the sidebar's bottom edge while the
+   sections scroll above it. The sidebar is a flex column only so a short list still pushes it down */
+.sidebar>*{flex:none}
+.sidebar-foot{position:sticky;z-index:2;bottom:0;margin-top:auto;background:var(--panel);border-top:1px solid var(--line);box-shadow:0 -2px 6px #0000000f;padding:9px 16px 7px}
+.legend{font-size:12px;color:var(--ink);display:flex;flex-wrap:wrap;gap:5px 14px;margin-bottom:6px}
 .legend:empty{display:none}
+.updated{font-size:10px;color:var(--muted)}
 .legend span{display:inline-flex;align-items:center;gap:5px}
 .legend .sw{width:12px;height:12px;border-radius:3px;display:inline-block}
 .legend .ln{width:21px;border-top:3px dashed #4fc4ea}
@@ -183,13 +190,13 @@ textarea{width:100%;border:1px solid var(--field);border-radius:4px;background:#
 @media(max-width:850px){
   :root{--bar:84px}
   #map{inset:var(--bar) 0 43vh 0}
-  .appbar{flex-wrap:wrap;align-content:center;gap:6px 10px;padding:6px 10px}
+  .appbar{grid-template-columns:auto 1fr;align-content:center;gap:6px 10px;padding:6px 10px}
   .brand-logo{height:22px}
   .appbar h1{font-size:17px}
-  .appbar .sub{font-size:10px}
-  .presets{width:100%}
+  .presets{grid-column:1/-1;justify-self:stretch}
   .presets button{flex:1;padding:4px 6px;font-size:12px}
-  .sidebar{top:auto;bottom:0;left:0;right:0;height:43vh;width:auto;border-right:0;border-top:1px solid var(--line)}
-  .legend{bottom:calc(43vh + 8px);right:7px;font-size:9px;padding:5px;max-width:calc(100vw - 14px)}
+  .sidebar{top:auto;bottom:0;left:0;right:0;height:43vh;width:auto;border-left:0;border-top:1px solid var(--line)}
+  .sidebar-foot{padding:6px 12px 5px}
+  .legend{font-size:10px;gap:3px 10px;margin-bottom:4px}
   .stage-flag{padding:4px 5px;font-size:10px}
 }
