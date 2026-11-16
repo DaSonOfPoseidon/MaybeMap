@@ -12,7 +12,7 @@ import shapely
 from shapely.geometry import mapping
 
 from maybemap import routing
-from maybemap.branding import load_branding
+from maybemap.branding import Branding, load_branding
 from maybemap.colors import darken
 from maybemap.config import (
     CITY_DATA_PATH,
@@ -308,7 +308,11 @@ def build(
     hubs_path: Path | str = REGION_HUBS_PATH,
     matrix=routing.drive_matrix,
     tech_table=routing.drive_table,
+    branding: Branding | None = None,
 ) -> dict:
+    # Read first: a bad BRAND_* value or a missing logo or font stops the build here,
+    # before any geocoding, boundary or routing lookup runs
+    branding = branding or load_branding()
     zones = load_kmz_zones(kmz_path)
     points, ordered_groups = load_city_points(city_path)
     colors = region_colors(ordered_groups)
@@ -348,7 +352,7 @@ def build(
         f"outlines, {len(places)} dispatch places, {len(staging)} staging types"
     )
     return {
-        "title": load_branding().title,
+        "title": branding.title,
         "builtAt": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "zones": build_zones(zones),
         "regions": [{"name": g, "color": colors[g]} for g in ordered_groups],

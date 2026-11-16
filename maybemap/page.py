@@ -45,7 +45,9 @@ def render(payload: dict, branding: brand.Branding | None = None) -> str:
     return pattern.sub(lambda m: replacements[m.group(0)], template)
 
 
-def write(payload: dict, path: Path | str = OUTPUT_PATH) -> Path:
-    path = write_text_atomic(path, render(payload))
+def write(
+    payload: dict, path: Path | str = OUTPUT_PATH, branding: brand.Branding | None = None
+) -> Path:
+    path = write_text_atomic(path, render(payload, branding))
     print(f"Wrote {path.name} ({path.stat().st_size / 1024:.0f} kB)")
     return path

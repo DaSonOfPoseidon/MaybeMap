@@ -67,7 +67,7 @@ def test_a_failed_write_keeps_the_previous_map(tmp_path, monkeypatch):
     # after a plain write_text has already truncated the old map
     out = tmp_path / "map.html"
     out.write_text("previous complete map")
-    monkeypatch.setattr(page, "render", lambda payload: "<html>" + "\udcff")
+    monkeypatch.setattr(page, "render", lambda payload, branding=None: "<html>" + "\udcff")
     with pytest.raises(UnicodeEncodeError):
         page.write(PAYLOAD, out)
     assert out.read_text() == "previous complete map"
