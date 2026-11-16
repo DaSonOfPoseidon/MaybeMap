@@ -1045,11 +1045,17 @@ for (const id of collapsedSet(readStore(COLLAPSE_KEY), collapseSections.map(s =>
 collapseSections.forEach(section => section.querySelector('.collapse-btn').addEventListener('click', () => toggleCollapsed(section)));
 
 // ---------- Theme ----------
-// Auto follows the system; Dark and Light force one. Stored text is untrusted, so only these three are accepted
+// Auto follows the system; Dark and Light force one (the button only offers light and dark). Stored text is
+// untrusted, so only these three are accepted
 const THEMES = ['auto', 'dark', 'light'];
 function themeFrom(saved) { return THEMES.includes(saved) ? saved : 'auto'; }
-function nextTheme(mode) { return THEMES[(THEMES.indexOf(themeFrom(mode)) + 1) % THEMES.length]; }
 function effectiveTheme(mode, systemDark) { return themeFrom(mode) === 'auto' ? (systemDark ? 'dark' : 'light') : themeFrom(mode); }
+// A click flips the page to the other theme. When that is the system's own theme the choice is cleared (auto), so
+// the page goes back to following the system and there is no separate Auto state to land on
+function toggleTheme(mode, systemDark) {
+  const target = effectiveTheme(mode, systemDark) === 'dark' ? 'light' : 'dark';
+  return target === (systemDark ? 'dark' : 'light') ? 'auto' : target;
+}
 // The theme is a viewer preference like notes and the collapsed sections: it is not in DEFAULTS, so the
 // reset leaves it alone
 let themeMode = themeFrom(readStore(THEME_KEY));
@@ -1058,19 +1064,20 @@ function applyTheme() {
   if (themeMode === 'auto') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = themeMode;
   const btn = $('#themeToggle');
-  const label = 'Theme: ' + themeMode[0].toUpperCase() + themeMode.slice(1);
-  btn.dataset.mode = themeMode;
+  const shown = effectiveTheme(themeMode, systemDark.matches);
+  const label = shown === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+  btn.dataset.mode = shown;
   btn.setAttribute('aria-label', label);
   btn.title = label;
   renderBasemap();
 }
 $('#themeToggle').addEventListener('click', () => {
-  themeMode = nextTheme(themeMode);
+  themeMode = toggleTheme(themeMode, systemDark.matches);
   writeStore(THEME_KEY, themeMode);
   applyTheme();
 });
-// In auto the system's own switch (an OS schedule, say) flips the page, so the gray tiles follow it
-if (systemDark.addEventListener) systemDark.addEventListener('change', renderBasemap);
+// In auto the system's own switch (an OS schedule, say) flips the page, so the icon and the gray tiles follow it
+if (systemDark.addEventListener) systemDark.addEventListener('change', applyTheme);
 
 // ---------- Wiring ----------
 function update() {
