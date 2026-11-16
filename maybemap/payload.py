@@ -12,6 +12,7 @@ import shapely
 from shapely.geometry import mapping
 
 from maybemap import routing
+from maybemap.branding import load_branding
 from maybemap.colors import darken
 from maybemap.config import (
     CITY_DATA_PATH,
@@ -20,7 +21,6 @@ from maybemap.config import (
     DISPATCH_STAGING_PATH,
     DISPATCH_TECHS_PATH,
     KMZ_PATH,
-    MAP_TITLE,
     OUTLINE_SIMPLIFY_M,
     REGION_HUBS_PATH,
     REGION_PALETTE,
@@ -348,7 +348,7 @@ def build(
         f"outlines, {len(places)} dispatch places, {len(staging)} staging types"
     )
     return {
-        "title": MAP_TITLE,
+        "title": load_branding().title,
         "builtAt": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "zones": build_zones(zones),
         "regions": [{"name": g, "color": colors[g]} for g in ordered_groups],

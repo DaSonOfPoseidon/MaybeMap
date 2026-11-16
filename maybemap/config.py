@@ -22,7 +22,6 @@ DISPATCH_STAGING_PATH = DATA_DIR / "dispatch_staging.csv"
 REGION_HUBS_PATH = DATA_DIR / "region_hubs.csv"
 
 OUTPUT_PATH = OUTPUT_DIR / "maybe_map.html"
-MAP_TITLE = "Socket Fiber Coverage - 2026"
 
 # Towns the export lists with no region. They still get a dot so the whole service
 # footprint shows, but no boundary lookup and no place in the dispatch set.

@@ -455,7 +455,7 @@ function select(key, fly, fromSearch) {
   updateEdgeLabelVisibility();
   $('#selectedSection').hidden = false;
   // On the phone's short bottom sheet the destination and the card header must stay in view: scroll to
-  // the first of them that is shown (its eyebrow names the town), not past the search results
+  // the first of them that is shown (its heading names the town), not past the search results
   const first = window.matchMedia('(max-width: 850px)').matches
     ? [$('#driveToSection'), $('#selectedSection')].find(x => !x.hidden) : null;
   $('.sidebar').scrollTo({ top: first ? first.offsetTop : 0, behavior: 'smooth' });
@@ -514,9 +514,9 @@ function closestTechsSection(t) {
     rows.push({ tech, m: time.m, s: time.s, here: tech.place === t.pi });
   }
   const wrap = el('div');
-  wrap.append(el('div', 'field-label', '3 closest techs · from their home town'));
+  wrap.append(el('div', 'field-label', 'Closest techs'));
   if (!rows.length) {
-    wrap.append(el('p', 'route-note', 'No technicians match the department filter.'));
+    wrap.append(el('p', 'route-note', 'No techs in the selected departments.'));
     return wrap;
   }
   closestTechs(rows).forEach((r, i) => {
@@ -526,7 +526,7 @@ function closestTechsSection(t) {
     const detail = el('div', 'detail');
     detail.append(el('b', '', r.tech.name), el('small', '', [
       r.tech.departments.join(', ') || 'No department',
-      r.tech.basis === 'region' ? home.name + ' · region hub, no home town' : home.name,
+      r.tech.basis === 'region' ? home.name + ' (region hub)' : home.name,
     ].join(' · ')));
     const val = el('div', 'value');
     val.append(el('b', '', r.here ? 'Here' : miles(r.m) + ' mi'), el('small', '', r.here ? 'Based in this town' : duration(r.s)));
@@ -566,7 +566,7 @@ function driveToSection() {
       btn.addEventListener('click', () => pick(j));
       list.append(btn);
     }
-    if (input.value.trim() && !list.children.length) list.append(el('div', 'more', 'No dispatch town matches.'));
+    if (input.value.trim() && !list.children.length) list.append(el('div', 'more', 'No matches.'));
   });
   input.addEventListener('keydown', ev => {
     if (ev.key === 'Enter') {
@@ -620,7 +620,7 @@ function renderCard() {
   box.append(el('h2', 'card-title', t.name + ', ' + t.state));
   const sub = el('p', 'card-sub');
   const where = c ? [c.county ? c.county + ' County' : null, c.regioned ? c.region : 'No region', c.zone].filter(Boolean).join(' · ')
-    : 'Tech base · not in the city export';
+    : 'Tech home town, outside the service area';
   sub.append(document.createTextNode(where));
   box.append(sub);
 
@@ -632,13 +632,13 @@ function renderCard() {
   }
 
   if (t.techs.length) {
-    box.append(el('div', 'field-label', 'Technicians based here'));
+    box.append(el('div', 'field-label', 'Techs based here'));
     const list = el('div', 'tech-list');
     for (const tech of t.techs) {
       const row = el('div', 'tech-row' + (techOn(tech) ? '' : ' off'));
       row.append(el('b', '', tech.name));
       const bits = [tech.departments.join(', ') || 'No department', tech.region];
-      if (tech.basis === 'region') bits.push('no home town · placed at region hub');
+      if (tech.basis === 'region') bits.push('at region hub');
       row.append(el('small', '', bits.filter(Boolean).join(' · ')));
       list.append(row);
     }
@@ -646,13 +646,13 @@ function renderCard() {
   }
 
   if (t.pi >= 0) {
-    box.append(el('div', 'field-label', '3 closest dispatch towns · drive time'));
+    box.append(el('div', 'field-label', 'Closest towns'));
     nearest(t.pi, 3, false).forEach((e, i) => box.append(rowEntry(i + 1, t, e)));
   }
   const closest = closestTechsSection(t);
   if (closest) box.append(closest);
   if (t.pi < 0) {
-    box.append(el('p', 'route-note', 'Not a dispatch town, so no closest-towns list or drive-time search: only towns with a region, and tech bases, have those.'));
+    box.append(el('p', 'route-note', 'No drive times for towns without a region.'));
   }
 
   const links = el('div', 'btnrow');
@@ -667,12 +667,12 @@ function renderCard() {
   label.style.display = 'block';
   const area = el('textarea');
   area.id = 'townNotes';
-  area.placeholder = 'Shop access, special equipment, local contact, coverage tips… (no passwords)';
+  area.placeholder = 'Add a note (no passwords)';
   area.value = getNote(selectedKey);
-  const saveState = el('div', 'save-state', 'Notes save automatically in this browser.');
+  const saveState = el('div', 'save-state', 'Saved automatically in this browser.');
   area.addEventListener('input', () => {
     if (area.value) notes[selectedKey] = area.value; else delete notes[selectedKey];
-    saveState.textContent = writeStore(NOTES_KEY, notes) ? 'Saved in this browser · Export CSV to share' : 'Browser storage unavailable · Export notes CSV to keep changes';
+    saveState.textContent = writeStore(NOTES_KEY, notes) ? 'Saved' : 'Could not save in this browser. Export the notes to keep them.';
   });
   box.append(label, area, saveState);
   renderDriveTo();
@@ -704,8 +704,8 @@ function renderDirectory() {
     btn.addEventListener('click', () => select(s.key, true, true));
     box.append(btn);
   }
-  if (hits.length > 30) box.append(el('div', 'more', (hits.length - 30) + ' more · keep typing to narrow it down'));
-  if (!hits.length) box.append(el('div', 'more', 'No town, tech or region matches.'));
+  if (hits.length > 30) box.append(el('div', 'more', (hits.length - 30) + ' more'));
+  if (!hits.length) box.append(el('div', 'more', 'No matches.'));
 }
 $('#townFilter').addEventListener('input', renderDirectory);
 // Like the drive-time search: Enter opens the first result shown (as a search-result pick, so the query
@@ -865,29 +865,13 @@ function renderControls() {
   const visibleZones = zoneNames.filter(z => state.zonesOn[z]).length;
   const filtered = cities.filter(cityPasses);
   const techCount = techs.filter(techOn).length;
-  // Techs on orange pins are never named on the map, so they are not labels
-  const labeledTechs = places.reduce((n, p) => n + namedTechs(p, activeTechs(p)).length, 0);
-  $('#zonesHint').textContent = visibleZones + ' of ' + zoneNames.length + ' zones shown';
-  $('#outlinesHint').textContent = D.outlines.features.filter(f => cityPasses(cities[f.properties.city])).length + ' of ' + D.outlines.features.length + ' city limits match the filters';
-  $('#dotsHint').textContent = filtered.length + ' of ' + cities.length + ' towns match the filters';
-  $('#dispatchHint').textContent = places.length + ' towns · ' + techCount + ' techs';
-  $('#techNamesHint').textContent = state.techNames ? 'ON · ' + labeledTechs + ' technician labels' : 'OFF · no technician labels';
-  $('#townNamesHint').textContent = state.townNames ? 'ON · every dispatch town labeled' : 'OFF · hover a pin for its name';
-  $('#placeLabelsHint').textContent = BASEMAP_LABEL_HINT[state.basemap](state.placeLabels);
-
-  const stats = $('#stats');
-  stats.replaceChildren();
-  for (const [n, label] of [[filtered.length, 'towns'], [D.regions.filter(r => r.name !== D.unassignedLabel).length, 'regions'], [places.length, 'dispatch'], [techCount, 'techs']]) {
-    const s = el('span');
-    s.append(el('b', '', String(n)), document.createTextNode(label));
-    stats.append(s);
-  }
+  $('#zonesHint').textContent = visibleZones + ' of ' + zoneNames.length + ' zones';
+  $('#outlinesHint').textContent = D.outlines.features.filter(f => cityPasses(cities[f.properties.city])).length + ' of ' + D.outlines.features.length + ' towns';
+  $('#dotsHint').textContent = filtered.length + ' of ' + cities.length + ' towns';
+  $('#dispatchHint').textContent = places.length + ' towns, ' + techCount + ' techs';
+  // The Streets tiles carry their own place names, so the switch has nothing to do there
+  $('#placeLabels').closest('label').title = BASEMAPS[state.basemap].labels ? '' : 'Streets already shows place names';
 }
-const BASEMAP_LABEL_HINT = {
-  gray: on => (on ? 'ON · Esri place names over the map' : 'OFF · only this map\'s own labels'),
-  satellite: on => (on ? 'ON · boundaries and places over the imagery' : 'OFF · bare imagery'),
-  streets: () => 'Built into the Streets tiles',
-};
 
 function renderLegend() {
   const box = $('#legend');
@@ -1035,6 +1019,5 @@ function update() {
   persist();
 }
 $('#title').textContent = D.title;
-$('#subtitle').textContent = cities.length + ' serviced towns · ' + zoneNames.length + ' zones · ' + places.length + ' dispatch towns · built ' + D.builtAt;
-$('#builtAt').textContent = 'Map data built ' + D.builtAt + '. Drive times are from OSRM at build time.';
+$('#subtitle').textContent = 'Updated ' + D.builtAt;
 update();
