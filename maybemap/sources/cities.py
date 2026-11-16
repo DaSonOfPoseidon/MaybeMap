@@ -116,6 +116,10 @@ def _read_frame(path: Path, *, unassigned_label: str | None) -> pd.DataFrame:
 
     for name, limit in COORD_LIMITS.items():
         df.loc[df[name].abs() > limit, name] = pd.NA
+    # Query exports write 0 for "unknown". No serviced town sits on the equator or
+    # the prime meridian, so a 0 sends the town to the geocoder instead.
+    unknown = (df["SourceLat"] == 0) | (df["SourceLon"] == 0)
+    df.loc[unknown.fillna(False), list(COORD_LIMITS)] = pd.NA
 
     blank = df["Group"] == ""
     if unassigned_label is None:
@@ -235,6 +239,7 @@ def load_city_boundaries(gdf_points):
                 # Not a miss and not cached: a dot this build, asked again next time
                 print(f"   {exc}")
                 unavailable.append(f"{city}, {state}")
+                total_fallbacks += 1
                 records.append({"City": city, "State": state, "Group": group, "geometry": None})
                 continue
             if geom_ll is None:

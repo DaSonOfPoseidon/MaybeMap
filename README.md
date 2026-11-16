@@ -46,7 +46,7 @@ Column names are matched case-insensitively. The roster CSVs are optional; witho
 the dispatch layer routes town to town with no techs, and there is no staging section.
 
 A town with `Latitude`/`Longitude` in the export is placed exactly there. A town without
-them, or with impossible values, is geocoded instead. Geocoding a town the cache has not
+them, or with impossible or 0 values, is geocoded instead. Geocoding a town the cache has not
 seen needs a [Geoapify](https://www.geoapify.com/) key in `.env` (see `.env.example`).
 Nothing else needs a key.
 

@@ -239,7 +239,10 @@ def test_an_unavailable_fallback_draws_a_dot_for_this_build_only(
     boundaries = cities.load_city_boundaries(points)
     assert boundaries.geometry.isna().all()
     assert cached == []
-    assert "Kansas City" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Kansas City" in out
+    # The summary counts them as dots too, matching the warning above it
+    assert f"0 with real boundaries and {len(points)} kept as dots" in out
 
 
 def test_the_county_disambiguates_a_shared_name(monkeypatch):

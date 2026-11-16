@@ -112,7 +112,18 @@ def test_export_coordinates_are_used_without_geocoding(tmp_path, monkeypatch):
     assert (round(ll["Columbia"].y, 2), round(ll["Columbia"].x, 2)) == (38.95, -92.33)
 
 
-@pytest.mark.parametrize("lat,lon", [("91", "-92.3"), ("38.9", "-200"), ("abc", "-92.3")])
+# 0 is the placeholder query exports write for "unknown", never a real town here
+@pytest.mark.parametrize(
+    "lat,lon",
+    [
+        ("91", "-92.3"),
+        ("38.9", "-200"),
+        ("abc", "-92.3"),
+        ("0", "0"),
+        ("0", "-92.3"),
+        ("38.9", "0"),
+    ],
+)
 def test_unusable_export_coordinates_fall_back_to_geocoding(tmp_path, monkeypatch, lat, lon):
     path = tmp_path / "bad_coords.csv"
     path.write_text(f"City,State,Region,Latitude,Longitude\nCOLUMBIA,MO,Central,{lat},{lon}\n")
