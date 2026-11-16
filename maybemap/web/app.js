@@ -681,18 +681,22 @@ const searchIndex = allKeys.map(key => {
   const c = t.city;
   return { key, t, text: [t.name, t.state, t.techs.map(x => x.name + ' ' + (x.id || '')).join(' '), c ? c.region : '', c && c.zone ? c.zone : ''].join(' ').toLowerCase() };
 });
+// The search's hit list, in the order its rows show: renderDirectory() draws it and Enter opens its first
+function directoryHits(q) {
+  return searchIndex.filter(s => s.text.includes(q) || getNote(s.key).toLowerCase().includes(q))
+    .sort((a, b) => Number(b.t.techs.length > 0) - Number(a.t.techs.length > 0) || a.t.name.localeCompare(b.t.name));
+}
 function renderDirectory() {
   const q = $('#townFilter').value.trim().toLowerCase();
   const box = $('#directory');
   box.replaceChildren();
   if (!q) return;
-  const hits = searchIndex.filter(s => s.text.includes(q) || getNote(s.key).toLowerCase().includes(q))
-    .sort((a, b) => Number(b.t.techs.length > 0) - Number(a.t.techs.length > 0) || a.t.name.localeCompare(b.t.name));
+  const hits = directoryHits(q);
   for (const s of hits.slice(0, 30)) {
     const btn = el('button', 'town' + (s.key === selectedKey ? ' active' : ''));
     btn.type = 'button';
     btn.append(el('i', 'dot' + (s.t.place && pinIsOrange(s.t.place) ? ' tech' : '')),
-      el('span', '', s.t.name + (getNote(s.key) ? ' 📝' : '')));
+      el('span', '', s.t.name + ', ' + s.t.state + (getNote(s.key) ? ' 📝' : '')));
     btn.addEventListener('click', () => select(s.key, true, true));
     box.append(btn);
   }
@@ -700,6 +704,17 @@ function renderDirectory() {
   if (!hits.length) box.append(el('div', 'more', 'No town, tech or region matches.'));
 }
 $('#townFilter').addEventListener('input', renderDirectory);
+// Like the drive-time search: Enter opens the first result shown (as a search-result pick, so the query
+// stays), Escape clears the box and the list
+$('#townFilter').addEventListener('keydown', ev => {
+  if (ev.key === 'Enter') {
+    const first = directoryHits($('#townFilter').value.trim().toLowerCase())[0];
+    if (first !== undefined) { ev.preventDefault(); select(first.key, true, true); }
+  } else if (ev.key === 'Escape') {
+    $('#townFilter').value = '';
+    renderDirectory();
+  }
+});
 
 // ---------- Sidebar controls ----------
 function swatchToggle(color, title, hint, checked, onChange, letter) {

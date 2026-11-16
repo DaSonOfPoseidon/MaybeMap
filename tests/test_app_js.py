@@ -26,6 +26,7 @@ NAMES = (
     "techOn",
     "activeTechs",
     "pinIsOrange",
+    "directoryHits",
 )
 
 
@@ -217,3 +218,29 @@ def test_outside_town_with_no_active_tech_is_not_an_orange_pin():
     # No techs at all, and a tech whose only department is switched off
     assert _orange({**OUTSIDE, "techs": []}) is False
     assert _orange({**OUTSIDE, "techs": [1]}) is False
+
+
+# directoryHits: the town search's hit list, shared by the result rows and Enter
+HIT_PRELUDE = """
+const NOTES = { 'zzb|ZZ': 'moved the zzneedle', };
+const getNote = key => NOTES[key] || '';
+const searchIndex = [
+  { key: 'zzb|ZZ', t: { name: 'Zzb', techs: [] }, text: 'zzb zz' },
+  { key: 'zza|ZY', t: { name: 'Zza', techs: [] }, text: 'zza zy' },
+  { key: 'zzc|ZY', t: { name: 'Zzc', techs: [1] }, text: 'zzc zy' },
+];
+"""
+
+
+def _hit_keys(q: str) -> list[str]:
+    return _run(f"directoryHits({json.dumps(q)}).map(s => s.key)", HIT_PRELUDE)
+
+
+def test_directory_hits_put_tech_towns_first_then_sort_by_name():
+    assert _hit_keys("zz") == ["zzc|ZY", "zza|ZY", "zzb|ZZ"]
+
+
+def test_directory_hits_match_notes_and_the_state():
+    assert _hit_keys("zzneedle") == ["zzb|ZZ"]
+    assert _hit_keys("zy") == ["zzc|ZY", "zza|ZY"]
+    assert _hit_keys("nomatch") == []
