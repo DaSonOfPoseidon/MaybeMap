@@ -68,3 +68,14 @@ person.
 contains people, grep the gitignored `data/` exports for each name and ID it uses.
 
 **Where:** Codex on PR #11 (`tests/test_dispatch_sources.py`).
+
+## A secret quoted back in an error message
+
+`requests` puts the full request URL in its exception text ("... for url: ...&apiKey=...").
+Folding that text into a build error printed the Geoapify key to the terminal and any log
+that captured it.
+
+**Check:** any message built from a request exception for a keyed service has the key
+replaced, and it is not chained with `from exc` (the traceback would print the original).
+
+**Where:** the pre-push gate, filed as #5 (`geoapify_forward`).

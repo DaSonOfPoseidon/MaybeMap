@@ -53,16 +53,31 @@ BOUNDARY_CACHE_PATH = CACHE_DIR / "osm_boundaries.json"
 
 
 def _load_cache(path) -> dict:
-    # Read-only: the file is created by the first save, so importing this module
-    # (as the tests do) never writes anything
+    # Read-only: the file is created by the first save
     try:
         return json.loads(path.read_text(encoding="utf-8") or "{}")
     except FileNotFoundError, json.JSONDecodeError:
         return {}
 
 
-GEOCODE_CACHE: dict[str, dict[str, float] | None] = _load_cache(GEOCODE_CACHE_PATH)
-BOUNDARY_WKT: dict[str, str | None] = _load_cache(BOUNDARY_CACHE_PATH)
+# Loaded on first use, not at import, so importing this module (as every test
+# does) never reads the real cache/ files. None means not loaded yet.
+GEOCODE_CACHE: dict[str, dict[str, float] | None] | None = None
+BOUNDARY_WKT: dict[str, str | None] | None = None
+
+
+def _geocodes() -> dict:
+    global GEOCODE_CACHE
+    if GEOCODE_CACHE is None:
+        GEOCODE_CACHE = _load_cache(GEOCODE_CACHE_PATH)
+    return GEOCODE_CACHE
+
+
+def _boundaries() -> dict:
+    global BOUNDARY_WKT
+    if BOUNDARY_WKT is None:
+        BOUNDARY_WKT = _load_cache(BOUNDARY_CACHE_PATH)
+    return BOUNDARY_WKT
 
 
 def _save(path, cache: dict):
@@ -70,11 +85,11 @@ def _save(path, cache: dict):
 
 
 def _save_geocode_cache():
-    _save(GEOCODE_CACHE_PATH, GEOCODE_CACHE)
+    _save(GEOCODE_CACHE_PATH, _geocodes())
 
 
 def _save_boundary_cache():
-    _save(BOUNDARY_CACHE_PATH, BOUNDARY_WKT)
+    _save(BOUNDARY_CACHE_PATH, _boundaries())
 
 
 def _require_api_key() -> str:
@@ -92,7 +107,7 @@ def geoapify_forward(text: str, *, retries: int = 3, backoff: float = 0.8):
     url = "https://api.geoapify.com/v1/geocode/search"
     params = {
         "text": text,
-        "apiKey": _require_api_key(),
+        "apiKey": (key := _require_api_key()),
         "limit": 1,
         "filter": "countrycode:us",
     }
@@ -115,7 +130,8 @@ def geoapify_forward(text: str, *, retries: int = 3, backoff: float = 0.8):
                     "state_code": props.get("state_code"),
                 }
         except requests.RequestException as exc:
-            problem = f"{type(exc).__name__}: {exc}"
+            # requests quotes the full URL, apiKey included, in its messages
+            problem = f"{type(exc).__name__}: {exc}".replace(key, "<redacted>")
         if attempt < retries:
             time.sleep(backoff * attempt)
     raise RuntimeError(
@@ -130,8 +146,9 @@ def geocode_city_state(city: str, state: str, progress_info: str = ""):
     # and a cache that answers only one of them is a cache that never hits.
     full = state_full(state)
     key = f"{city}, {full}"
-    if key in GEOCODE_CACHE:
-        return GEOCODE_CACHE[key]
+    cache = _geocodes()
+    if key in cache:
+        return cache[key]
 
     print(f"Geocoding: {city}, {state} {progress_info}")
     res = geoapify_forward(f"{city}, {full}, USA")
@@ -147,7 +164,7 @@ def geocode_city_state(city: str, state: str, progress_info: str = ""):
         )
         res = None
 
-    GEOCODE_CACHE[key] = res
+    cache[key] = res
     _save_geocode_cache()
 
     if res:
@@ -165,9 +182,10 @@ NOT_CACHED = object()
 
 def get_cached_osm_polygon(city: str, state: str):
     key = f"{city}, {state_full(state)}".upper()
-    if key not in BOUNDARY_WKT:
+    cache = _boundaries()
+    if key not in cache:
         return NOT_CACHED
-    w = BOUNDARY_WKT[key]
+    w = cache[key]
     if not w:
         return None
     geom = wkt.loads(w)
@@ -181,7 +199,7 @@ def get_cached_osm_polygon(city: str, state: str):
 
 def cache_osm_polygon(city: str, state: str, geom):
     key = f"{city}, {state_full(state)}".upper()
-    BOUNDARY_WKT[key] = geom.wkt if geom is not None else None
+    _boundaries()[key] = geom.wkt if geom is not None else None
     _save_boundary_cache()
 
 
