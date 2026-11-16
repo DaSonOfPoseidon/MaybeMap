@@ -270,6 +270,8 @@ function matchPlaces(list, q, excludeIndex, limit = 8) {
 // A town with no row in the city export (city is null) is outside the service area. With a tech
 // living there it is the one pin drawn orange; every other pin is the normal teal
 const outsideService = (p, activeCount) => p.city === null && activeCount > 0;
+// The one rule for an orange pin, shared by the icon, the label box and the search swatch
+const pinIsOrange = p => outsideService(p, activeTechs(p).length);
 // The techs a pin names on the map. An orange pin names none, so its label and hover
 // show the town only (the town card still lists them)
 function namedTechs(p, on) {
@@ -324,8 +326,9 @@ function labelText(p) {
 function renderPins() {
   const placed = [];
   const active = places.map(p => activeTechs(p).length);
-  const outside = places.map((p, i) => outsideService(p, active[i]));
-  // Only techs a pin names get label priority: an orange pin is labeled like a plain town
+  const outside = places.map(pinIsOrange);
+  // Only techs a pin names get label priority: an orange pin is labeled like a plain town.
+  // count orders the labels only; the pin and label colors come from outside[]
   const count = places.map((p, i) => (outside[i] ? 0 : active[i]));
   const order = places.map((p, i) => i).sort((a, b) => count[b] - count[a]);
   for (const i of order) {
@@ -346,7 +349,7 @@ function renderPins() {
       if (side) placed.push(side.box(pt, w, h));
     }
     if (side) {
-      mk.bindTooltip(label, { permanent: true, direction: side.direction, offset: side.offset, className: count[i] ? 'techlabel' : 'marketlabel', opacity: 0.97 });
+      mk.bindTooltip(label, { permanent: true, direction: side.direction, offset: side.offset, className: outside[i] ? 'techlabel' : 'marketlabel', opacity: 0.97 });
     } else {
       mk.bindTooltip(esc(pinTitle(p)), { direction: 'top', offset: [0, -8], className: 'hover-tip' });
     }
@@ -658,7 +661,7 @@ function renderDirectory() {
   for (const s of hits.slice(0, 30)) {
     const btn = el('button', 'town' + (s.key === selectedKey ? ' active' : ''));
     btn.type = 'button';
-    btn.append(el('i', 'dot' + (s.t.techs.length ? ' tech' : '')),
+    btn.append(el('i', 'dot' + (s.t.place && pinIsOrange(s.t.place) ? ' tech' : '')),
       el('span', '', s.t.name + (getNote(s.key) ? ' 📝' : '')));
     btn.addEventListener('click', () => select(s.key, true));
     box.append(btn);
@@ -733,8 +736,8 @@ for (const d of D.departments) {
   btn.type = 'button';
   btn.dataset.value = d;
   btn.append(document.createTextNode(d), el('small', '', n + (n === 1 ? ' tech' : ' techs')));
-  // The open card's closest techs depend on the department filter too
-  btn.addEventListener('click', () => { state.depts[d] = !state.depts[d]; update(); renderCard(); });
+  // The open card's closest techs and the search swatches depend on the department filter too
+  btn.addEventListener('click', () => { state.depts[d] = !state.depts[d]; update(); renderCard(); renderDirectory(); });
   $('#deptButtons').append(btn);
 }
 if (!D.departments.length) $('#deptSection').hidden = true;

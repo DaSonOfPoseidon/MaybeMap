@@ -108,3 +108,15 @@ one row: filter to the rows that have all of them, then take the first. When no 
 the whole set, all of them are NA.
 
 **Where:** the pre-push gate, filed as #15 (`load_city_points`).
+
+## A style key taken from a different variable
+
+`renderPins` had two arrays: `count` (techs a pin names, used to order labels) and `outside` (is the
+pin orange). The label's CSS class was keyed on `count`, so every teal pin with an active tech got
+the orange label box while its dot was teal. The search list had the same mix-up with `techs.length`.
+
+**Check:** a color or style comes from the same flag as the thing it must match (`pinIsOrange`), never
+from a value that was computed for another job (ordering, priority, counts). When a new reader of that
+flag depends on a filter, the filter's handler redraws it too.
+
+**Where:** issue #29 (label and search-swatch colors after #28).
