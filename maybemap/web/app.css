@@ -111,6 +111,13 @@ button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-vis
 .rowentry .value{text-align:right;white-space:nowrap}
 .rowentry .value small{display:block}
 .rowentry a{color:#126b9c;text-decoration:none;font-size:10px}
+.suggest{display:grid;gap:5px;margin-top:6px}
+.suggest:empty{display:none}
+.driveto-result{display:flex;align-items:center;gap:6px}
+.driveto-result .rowentry{flex:1;min-width:0}
+.driveto-result .route-note{flex:1;margin:7px 0}
+.driveto-result .clear{background:none;border:0;color:#607483;font-size:14px;padding:6px;cursor:pointer}
+.driveto-result .clear:hover{color:#123c55}
 .tech-list{display:grid;gap:5px;margin:4px 0 6px}
 .tech-row{background:#fff;border:1px solid #f0d9b5;border-left:4px solid var(--orange);border-radius:8px;padding:7px 10px}
 .tech-row b{display:block;font-size:13px;color:#9b5600}

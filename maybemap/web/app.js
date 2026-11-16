@@ -457,6 +457,61 @@ function rowEntry(rank, t, from, e, techRow) {
   row.addEventListener('click', () => select(keyOf(dest.name, dest.state), true));
   return row;
 }
+// "Drive time to…": a search over the dispatch towns, and the one answer picked from it
+function driveToSection(t) {
+  const wrap = el('div', 'driveto');
+  const label = el('label', 'field-label', 'Drive time to…');
+  label.htmlFor = 'driveToSearch';
+  label.style.display = 'block';
+  const input = el('input', 'select');
+  input.id = 'driveToSearch';
+  input.type = 'search';
+  input.placeholder = 'Search dispatch towns';
+  input.autocomplete = 'off';
+  const list = el('div', 'suggest');
+  const pick = j => { driveToKey = keyOf(places[j].name, places[j].state); renderCard(); };
+  const hits = () => matchPlaces(places, input.value, t.pi);
+  // Typing redraws only this list: a full card render would drop the input's focus
+  input.addEventListener('input', () => {
+    list.replaceChildren();
+    for (const j of hits()) {
+      const btn = el('button', 'town');
+      btn.type = 'button';
+      btn.append(el('span', '', places[j].name + ', ' + places[j].state));
+      btn.addEventListener('click', () => pick(j));
+      list.append(btn);
+    }
+    if (input.value.trim() && !list.children.length) list.append(el('div', 'more', 'No dispatch town matches.'));
+  });
+  input.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') {
+      const first = hits()[0];
+      if (first !== undefined) { ev.preventDefault(); pick(first); }
+    } else if (ev.key === 'Escape') {
+      input.value = '';
+      list.replaceChildren();
+    }
+  });
+  wrap.append(label, input, list);
+
+  const j = driveToKey !== null && placeIdxByKey.has(driveToKey) ? placeIdxByKey.get(driveToKey) : -1;
+  if (j >= 0) {
+    const result = el('div', 'driveto-result');
+    if (j === t.pi) {
+      result.append(el('p', 'route-note', 'Same town: ' + places[j].name + ', ' + places[j].state + '.'));
+    } else {
+      result.append(rowEntry('→', t, t.pi, { j, m: D.dispatch.meters[t.pi][j], s: D.dispatch.seconds[t.pi][j] }, false));
+    }
+    const clear = el('button', 'clear', '✕');
+    clear.type = 'button';
+    clear.title = 'Clear this destination';
+    clear.setAttribute('aria-label', 'Clear the drive-time destination');
+    clear.addEventListener('click', () => { driveToKey = null; renderCard(); });
+    result.append(clear);
+    wrap.append(result);
+  }
+  return wrap;
+}
 function renderCard() {
   const box = $('#selectedCard');
   box.replaceChildren();
@@ -499,6 +554,7 @@ function renderCard() {
       box.append(el('div', 'field-label', techs.length === 1 ? 'Nearest technician' : '2 nearest technicians'));
       techs.forEach((e, i) => box.append(rowEntry(i + 1, t, t.pi, e, true)));
     }
+    box.append(driveToSection(t));
   } else {
     box.append(el('p', 'route-note', 'Not in the dispatch set: only towns with a region, and tech bases, have drive times.'));
   }

@@ -1,4 +1,4 @@
-# The page's pure helpers (notes CSV, drive-to search), run under Node. Skipped where Node is not installed.
+# The page's pure helpers (notes CSV, drive-to search), run under Node. Skipped without Node.
 
 import json
 import re
