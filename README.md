@@ -113,7 +113,7 @@ nothing company-specific is committed. Every variable is optional.
 
 Colors must be hex (`#20245C`). Paths are relative to the project root. The logo and fonts
 are inlined into the page, so it still loads nothing but Leaflet and the tiles. A bad color
-or a missing file stops the build and names the variable.
+or a missing file stops the build before any lookups run, and names the variable.
 
 ## Which towns are in the dispatch set
 

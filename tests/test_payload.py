@@ -469,3 +469,35 @@ def test_a_region_whose_own_name_has_a_comma_matches_whole():
     towns = [_town(0, "Zz One", "Zz R1, East", 5), _town(1, "Zz Two", "Zz R1", 50)]
     roster = payload.build_places(towns, _techs(("Zz Ada", "", "", "Zz R1, East")))
     assert _placed_at(roster) == "Zz One"
+
+
+def test_a_bad_brand_setting_stops_the_build_before_any_lookup(monkeypatch):
+    monkeypatch.setenv("BRAND_COLOR_PRIMARY", "red")
+
+    def lookup_started(*args, **kwargs):
+        raise AssertionError("a lookup started before the branding was read")
+
+    monkeypatch.setattr(payload, "load_kmz_zones", lookup_started)
+    with pytest.raises(ValueError, match="BRAND_COLOR_PRIMARY"):
+        payload.build()
+
+
+def test_build_uses_the_branding_it_is_given(
+    monkeypatch, city_csv, seeded_cache, stub_city_boundaries, rosters, hubs, kmz_path
+):
+    from maybemap import branding
+
+    # The environment says one title, the branding passed in says another
+    monkeypatch.setenv("MAP_TITLE", "From the environment")
+    techs, staging = rosters
+    out = payload.build(
+        city_path=city_csv,
+        kmz_path=kmz_path,
+        techs_path=techs,
+        staging_path=staging,
+        hubs_path=hubs,
+        matrix=fake_matrix,
+        tech_table=fake_tech_table,
+        branding=branding.Branding(title="Given"),
+    )
+    assert out["title"] == "Given"
