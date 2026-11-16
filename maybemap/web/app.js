@@ -230,13 +230,13 @@ function renderOutlines() {
   }
 }
 
-// Dot area follows the customer count: the radius grows with its square root, from MIN_DOT (no count,
-// or none) to MAX_DOT (the largest town, and anything past it)
+// Dot size follows the customer count on a log scale, so one huge town does not squash the rest: the
+// radius runs from MIN_DOT (no count, or none) to MAX_DOT (the largest town, and anything past it)
 const MIN_DOT = 4;
 const MAX_DOT = 18;
 function dotRadius(n, max) {
   if (!Number.isFinite(n) || n <= 0 || !Number.isFinite(max) || max <= 0) return MIN_DOT;
-  return MIN_DOT + (MAX_DOT - MIN_DOT) * Math.sqrt(Math.min(n, max) / max);
+  return MIN_DOT + (MAX_DOT - MIN_DOT) * Math.log1p(Math.min(n, max)) / Math.log1p(max);
 }
 const counts = cities.map(c => c.customers).filter(n => Number.isFinite(n) && n > 0);
 const maxCustomers = counts.length ? Math.max(...counts) : 0;

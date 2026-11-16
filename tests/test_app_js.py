@@ -408,9 +408,10 @@ def test_dot_radius_grows_with_customers_and_handles_missing_counts():
     assert _radii([[0, 100], [-5, 100], [50, 0], [50, -1], [0, 0]]) == [low] * 5
     # The largest town gets the biggest dot, and a count past it is clamped there
     assert _radii([[100, 100], [500, 100]]) == [high, high]
-    # Dot area, not radius, follows the count: a town with a quarter of the customers
-    # has half the way from the smallest dot to the biggest
-    assert _radii([[25, 100]]) == [low + (high - low) * 0.5]
+    # A log scale, so one huge town does not squash the rest: against a 26,705-customer town, a
+    # 200-customer town is at least 4 px of radius bigger than a 5-customer one
+    five, two_hundred = _radii([[5, 26705], [200, 26705]])
+    assert two_hundred - five >= 4
     # Growing, and always finite
     small, mid, big = _radii([[1, 1000], [100, 1000], [1000, 1000]])
     assert low < small < mid < big == high
