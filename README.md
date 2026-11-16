@@ -91,8 +91,8 @@ option goes back to its default, the open town and searches close, and the view 
 zones. Notes, folded sections and the theme are kept.
 
 The legend sits at the foot of the sidebar, with the map's build date under it. The page follows the
-system's light or dark setting; the small button beside the build date cycles Auto, Dark and Light, and the
-choice is remembered per browser.
+system's light or dark setting. The small button beside the build date switches between light and dark, and
+the browser remembers it; switching back to the system's own theme goes back to following the system.
 
 Each section of the sidebar (except the town search and the selected-town cards) has a chevron
 beside its header that folds it down to the header, so the panel can be kept short. Folding

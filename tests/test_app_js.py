@@ -34,7 +34,7 @@ NAMES = (
     "dotRadius",
     "THEMES",
     "themeFrom",
-    "nextTheme",
+    "toggleTheme",
     "effectiveTheme",
     "basemapKey",
 )
@@ -427,16 +427,27 @@ def test_dot_radius_is_a_tier_per_customer_count_and_handles_missing_counts():
     assert [t["r"] for t in tiers] == sorted(t["r"] for t in tiers)
 
 
-def test_the_theme_cycles_auto_dark_light_and_wraps():
-    assert _run("['auto', 'dark', 'light'].map(nextTheme)") == ["dark", "light", "auto"]
+def test_the_toggle_flips_the_page_and_returns_to_following_the_system():
+    cases = [
+        ("auto", False, "dark"),
+        ("dark", False, "auto"),
+        ("auto", True, "light"),
+        ("light", True, "auto"),
+        # A stored dark while the system is dark: the page is dark, so it flips to light
+        ("dark", True, "light"),
+        ("light", False, "dark"),
+        ("sepia", False, "dark"),
+    ]
+    for mode, system_dark, want in cases:
+        assert _run(f"toggleTheme({json.dumps(mode)}, {json.dumps(system_dark)})") == want
 
 
 def test_a_saved_theme_outside_the_three_falls_back_to_auto():
     values = [None, "", "Dark", "sepia", 3, {"a": 1}, ["dark"], True]
     assert _run(f"{json.dumps(values)}.map(themeFrom)") == ["auto"] * len(values)
     assert _run("['auto', 'dark', 'light'].map(themeFrom)") == ["auto", "dark", "light"]
-    # A bad saved value starts the cycle from auto, not from nowhere
-    assert _run("nextTheme('sepia')") == "dark"
+    # A bad saved value is treated as auto, so the first click flips away from the system's theme
+    assert _run("toggleTheme('sepia', false)") == "dark"
 
 
 def test_auto_follows_the_system_and_a_forced_theme_ignores_it():

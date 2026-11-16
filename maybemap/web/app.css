@@ -273,7 +273,7 @@ textarea{width:100%;border:1px solid var(--field);border-radius:4px;background:v
 .theme-toggle{flex:none;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;margin:-4px -4px -4px 0;padding:0;border:0;border-radius:4px;background:transparent;color:var(--muted);cursor:pointer}
 .theme-toggle:hover{background:var(--hover);color:var(--ink)}
 .theme-toggle svg{display:none}
-.theme-toggle[data-mode="auto"] .i-auto,.theme-toggle[data-mode="light"] .i-light,.theme-toggle[data-mode="dark"] .i-dark{display:block}
+.theme-toggle[data-mode="light"] .i-light,.theme-toggle[data-mode="dark"] .i-dark{display:block}
 .legend span{display:inline-flex;align-items:center;gap:5px}
 .legend .legend-head{font-weight:600}
 .legend .sw{width:12px;height:12px;border-radius:3px;display:inline-block;flex:none;box-shadow:inset 0 0 0 1px var(--sw-edge)}

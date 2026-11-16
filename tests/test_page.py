@@ -644,8 +644,10 @@ def test_the_theme_toggle_lives_in_the_sidebar_footer_and_the_head_applies_it_ea
     assert foot.index('id="updated"') < foot.index('id="themeToggle"')
     # The icon button has a name and a title, and no visible text
     button = re.search(r'<button[^>]*id="themeToggle"[^>]*>(.*?)</button>', foot, re.S)
-    assert 'aria-label="Theme: Auto"' in button.group(0)
-    assert 'title="Theme: Auto"' in button.group(0)
+    assert 'aria-label="Switch to dark mode"' in button.group(0)
+    assert 'title="Switch to dark mode"' in button.group(0)
+    # Only a light and a dark icon: there is no visible auto state
+    assert "i-auto" not in html
     assert not re.sub(r"<svg.*?</svg>", "", button.group(1), flags=re.S).strip()
     # An inline script in the head, before the stylesheet, sets data-theme from the same storage key
     head = html[: html.index("</head>")]
@@ -656,6 +658,9 @@ def test_the_theme_toggle_lives_in_the_sidebar_footer_and_the_head_applies_it_ea
     assert "documentElement.dataset.theme" in early.group(0) and "catch" in early.group(0)
     source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
     assert "const THEME_KEY = 'maybemap_theme_v1';" in source
+    # The click flips light and dark, and the system's own switch redraws the page and the icon
+    assert "themeMode = toggleTheme(themeMode, systemDark.matches);" in source
+    assert "systemDark.addEventListener('change', applyTheme)" in source
 
 
 def test_reset_keeps_the_theme_and_the_basemap_follows_it():
@@ -668,7 +673,6 @@ def test_reset_keeps_the_theme_and_the_basemap_follows_it():
     assert "ESRI + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'" in source
     assert "ESRI + 'Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}'" in source
     assert "renderBasemap();" in _js_function(source, "applyTheme")
-    assert "systemDark.addEventListener('change', renderBasemap)" in source
     # A stored theme is only accepted from the three values
     assert "themeFrom(readStore(THEME_KEY))" in source
     html = (page.WEB_DIR / "template.html").read_text(encoding="utf-8")
