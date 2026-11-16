@@ -29,8 +29,8 @@ NAMES = (
     "pinIsOrange",
     "directoryHits",
     "collapsedSet",
-    "MIN_DOT",
-    "MAX_DOT",
+    "DOT_TIERS",
+    "MISSING_DOT",
     "dotRadius",
 )
 
@@ -396,23 +396,27 @@ def test_collapsed_set_keeps_a_valid_id_once():
     assert _collapsed([]) == []
 
 
-def _radii(pairs):
-    return _run(f"{json.dumps(pairs)}.map(([n, max]) => dotRadius(n, max))")
+def _radii(counts):
+    return _run(f"{json.dumps(counts)}.map(n => dotRadius(n))")
 
 
-def test_dot_radius_grows_with_customers_and_handles_missing_counts():
-    low, high = _run("[MIN_DOT, MAX_DOT]")
-    # A missing, empty or negative count, or no largest town to scale by, gets the smallest dot
-    missing = _run("[null, undefined, NaN].map(n => dotRadius(n, 100))")
-    assert missing == [low] * 3
-    assert _radii([[0, 100], [-5, 100], [50, 0], [50, -1], [0, 0]]) == [low] * 5
-    # The largest town gets the biggest dot, and a count past it is clamped there
-    assert _radii([[100, 100], [500, 100]]) == [high, high]
-    # A log scale, so one huge town does not squash the rest: against a 26,705-customer town, a
-    # 200-customer town is at least 4 px of radius bigger than a 5-customer one
-    five, two_hundred = _radii([[5, 26705], [200, 26705]])
-    assert two_hundred - five >= 4
-    # Growing, and always finite
-    small, mid, big = _radii([[1, 1000], [100, 1000], [1000, 1000]])
-    assert low < small < mid < big == high
-    assert all(0 < r < 1e6 for r in (small, mid, big))
+def test_dot_radius_is_a_tier_per_customer_count_and_handles_missing_counts():
+    missing = _run("MISSING_DOT")
+    assert missing == 3.5
+    # No count, an empty count, a negative one and NaN (JSON turns it into null) get the missing dot
+    assert _run("[null, undefined, NaN, 0, -5].map(n => dotRadius(n))") == [missing] * 5
+    # Every tier boundary: the last count of a tier and the first of the next
+    edges = _radii([1, 49, 50, 249, 250, 999, 1000, 9999, 10000])
+    assert edges == [4, 4, 6.5, 6.5, 9, 9, 12, 12, 16]
+    # Anything past the top tier stays in it, and a count between 0 and 1 still gets the first tier
+    assert _radii([26705, 1e9]) == [16, 16]
+    assert _radii([0.5]) == [4]
+    # Growing with the count, every radius finite and above the missing dot
+    counts = [1, 10, 50, 100, 250, 500, 1000, 5000, 10000, 26705]
+    radii = _radii(counts)
+    assert radii == sorted(radii)
+    assert all(missing < r < 100 for r in radii)
+    # The tiers themselves are ascending, so the lookup keeps the highest one reached
+    tiers = _run("DOT_TIERS")
+    assert [t["lo"] for t in tiers] == sorted(t["lo"] for t in tiers)
+    assert [t["r"] for t in tiers] == sorted(t["r"] for t in tiers)
