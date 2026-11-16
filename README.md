@@ -95,10 +95,13 @@ region's other towns. Their card says so, since drive times from there are an es
 of where they start. A tech with neither a Town nor a known region can't be placed. The
 build names them, and so does the dispatch section of the page.
 
-The **Departments** buttons in the dispatch section choose which techs count. Tech pins,
-labels, "nearest tech" route lines and each card's "3 closest techs" only consider techs in
-a selected department, so with only TC on, they are the closest TC techs. The roster has no
-street address, so a tech starts from their home town (or their region's hub).
+The **Departments** buttons in the dispatch section choose which techs count. They decide
+which orange pins show (a town outside the service area, where a counted tech lives) and
+which tech names appear on labels. In-service teal pins keep their look. "Nearest tech"
+route lines and each card's "3 closest techs" only consider counted techs, so with only TC
+on, they are the closest TC techs. A tech with no department in the export always counts.
+The roster has no street address, so a tech starts from their home town (or their region's
+hub).
 
 ## Drive times
 
