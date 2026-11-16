@@ -76,6 +76,10 @@ const zoneByLabel = new Map(D.zones.features.map(f => [f.properties.label, f.pro
 const regionColor = new Map(D.regions.map(r => [r.name, r.color]));
 const allKeys = [...new Set([...cityByKey.keys(), ...placeIdxByKey.keys()])];
 let selectedKey = null;
+// The destination picked in the open card's drive-time search. It outlives the open town, so
+// another start town shows the time from there; renderCard() reads it, so whatever changes it
+// re-renders the card
+let driveToKey = null;
 
 function townInfo(key) {
   const city = cityByKey.get(key) || null;
@@ -240,6 +244,19 @@ function nearest(i, n, techsOnly) {
     out.push({ j, m: D.dispatch.meters[i][j], s: D.dispatch.seconds[i][j] });
   }
   return out.sort((a, b) => a.s - b.s || a.m - b.m).slice(0, n);
+}
+// Indexes of the places a search matches: a substring of "name, state", prefix
+// matches first, then by name. The start town and an empty query give nothing
+function matchPlaces(list, q, excludeIndex, limit = 8) {
+  q = String(q).trim().toLowerCase();
+  if (!q) return [];
+  const hits = [];
+  list.forEach((p, j) => {
+    const text = (p.name + ', ' + p.state).toLowerCase();
+    if (j !== excludeIndex && text.includes(q)) hits.push({ j, prefix: text.startsWith(q), name: p.name });
+  });
+  hits.sort((a, b) => Number(b.prefix) - Number(a.prefix) || a.name.localeCompare(b.name));
+  return hits.slice(0, limit).map(h => h.j);
 }
 const pinLayer = L.layerGroup();
 const routeLayer = L.layerGroup();
