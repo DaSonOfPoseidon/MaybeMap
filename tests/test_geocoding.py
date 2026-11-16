@@ -406,6 +406,56 @@ def test_a_failed_geocode_never_prints_the_api_key(monkeypatch, error):
     assert "apiKey=<redacted>" in str(err.value)
 
 
+# A key with characters that percent-encoding rewrites: requests quotes the encoded form
+ODD_SECRET = "ab+cd/ef= gh"
+
+
+def _encoded_url(key):
+    request = requests.Request(
+        "GET",
+        "https://api.geoapify.com/v1/geocode/search",
+        params={"text": "Nowhere", "apiKey": key},
+    )
+    return request.prepare().url
+
+
+@pytest.mark.parametrize("quoted", ["quote_plus", "quote", "requests"])
+def test_an_encoded_api_key_is_redacted_too(monkeypatch, quoted):
+    from urllib.parse import quote, quote_plus
+
+    url = {
+        "quote_plus": f"https://x/search?apiKey={quote_plus(ODD_SECRET)}&limit=1",
+        "quote": f"https://x/search?apiKey={quote(ODD_SECRET, safe='')}&limit=1",
+        "requests": _encoded_url(ODD_SECRET),
+    }[quoted]
+    assert ODD_SECRET not in url  # the encoded form really differs from the raw key
+
+    def get(*args, **kwargs):
+        raise requests.HTTPError(f"503 Server Error: Service Unavailable for url: {url}")
+
+    monkeypatch.setenv("GEOAPIFY_KEY", ODD_SECRET)
+    monkeypatch.setattr(geocoding.SESSION, "get", get)
+    monkeypatch.setattr(geocoding.time, "sleep", lambda s: None)
+    with pytest.raises(RuntimeError) as err:
+        geocoding.geocode_city_state("Nowhere", "MO")
+    message = str(err.value)
+    for form in (ODD_SECRET, quote(ODD_SECRET, safe=""), quote_plus(ODD_SECRET)):
+        assert form not in message
+    assert "cd%2Fef" not in message and "ab+cd" not in message
+    assert "apiKey=<redacted>" in message
+
+
+def test_an_error_without_the_key_is_left_alone(monkeypatch):
+    def get(*args, **kwargs):
+        raise requests.ConnectionError("Connection refused")
+
+    monkeypatch.setenv("GEOAPIFY_KEY", ODD_SECRET)
+    monkeypatch.setattr(geocoding.SESSION, "get", get)
+    monkeypatch.setattr(geocoding.time, "sleep", lambda s: None)
+    with pytest.raises(RuntimeError, match="ConnectionError: Connection refused"):
+        geocoding.geocode_city_state("Nowhere", "MO")
+
+
 def test_an_empty_geocode_answer_is_cached_as_not_found(monkeypatch):
     monkeypatch.setenv("GEOAPIFY_KEY", "test")
     monkeypatch.setattr(geocoding.SESSION, "get", lambda *a, **k: _Response(200, {"features": []}))

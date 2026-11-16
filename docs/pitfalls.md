@@ -78,7 +78,11 @@ that captured it.
 **Check:** any message built from a request exception for a keyed service has the key
 replaced, and it is not chained with `from exc` (the traceback would print the original).
 
-**Where:** the pre-push gate, filed as #5 (`geoapify_forward`).
+The key is quoted in the URL's encoded form too: a `+`, `/`, `=` or space in it becomes `%2B`,
+`%2F`, `%3D` or `+`, and a plain `replace(key, ...)` misses that. Redact every form
+(`_redact`: raw, `quote`, `quote_plus`, `urlencode`), and test with a key that encoding changes.
+
+**Where:** the pre-push gate, filed as #5 (`geoapify_forward`), and #16 for the encoded forms.
 
 ## A spy test that never sees the path it claims to cover
 
@@ -92,3 +96,15 @@ reads in it. A write in the wrong encoding would have gone unnoticed.
 result instead (the bytes on disk).
 
 **Where:** issue #8, found by the pre-push gate.
+
+## Aggregating paired columns independently
+
+`groupby(...).agg(lat="first", lon="first")` takes each column's first non-null value on its
+own. A town on several export rows, one with only a latitude and another with only a
+longitude, got a point built from two different rows, and it was never geocoded.
+
+**Check:** values that only mean something together (latitude and longitude) are taken from
+one row: filter to the rows that have all of them, then take the first. When no row has
+the whole set, all of them are NA.
+
+**Where:** the pre-push gate, filed as #15 (`load_city_points`).
