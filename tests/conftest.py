@@ -91,6 +91,17 @@ def no_network(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def neutral_branding(monkeypatch):
+    # A developer's .env branding must never change what the tests see
+    from maybemap import branding
+
+    for var in ["MAP_TITLE", "BRAND_LOGO", "BRAND_FONT_HEADING", "BRAND_FONT_BODY"] + [
+        v for v, _ in branding.COLORS.values()
+    ]:
+        monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def isolated_caches(monkeypatch, tmp_path):
     # Every test starts from empty caches that live in its own temp folder, so a
     # developer's real cache can neither answer a lookup nor be written to

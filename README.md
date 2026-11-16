@@ -55,7 +55,7 @@ Nothing else needs a key.
 ## Layers
 
 Every section of the sidebar is a layer with its own switch. The **Territory**,
-**Coverage** and **Dispatch** buttons in the top bar are shortcuts that flip those
+**Coverage** and **Dispatch** buttons in the header are shortcuts that flip those
 switches. They are not separate views.
 
 - **Zones**: the KMZ zones in their own colors. Each zone has its own switch, and there
@@ -65,7 +65,7 @@ switches. They are not separate views.
 - **City dots**: a dot for every serviced town, in its region's color, sized by customer
   count. Towns with no region are gray, and their switch (Unassigned, under Regions) starts
   off, so the gray dots stay hidden until it is turned on.
-- **Town filters**: customer count, service type and region. These apply to both dots
+- **Filters**: customer count, service type and region. These apply to both dots
   and outlines.
 - **Dispatch**: pins for every town that has a region, plus every tech's home town. Tech
   towns inside the service area stay the normal teal; only a town that is not in the city
@@ -79,8 +79,8 @@ In the town search, each result shows its state; Enter opens the first result an
 Click any dot, outline or pin to open its card. The card shows customer detail, region and
 zone, the **3 closest techs** (every town gets them, timed from each tech's home town), the
 3 closest dispatch towns by drive time, Google Maps links, and **notes**. For a dispatch town, a
-**Drive time to…** search sits right under the town search, above the card, for the drive time to
-any other dispatch town. Notes are saved in that browser only; use **Export notes CSV** to back them
+**Drive time from** search sits right under the town search, above the card, for the drive time to
+any other dispatch town. Notes are saved in that browser only; use **Export CSV** to back them
 up or share them, and **Import** to load them elsewhere. Imports also accept the old
 dispatch map's `Market, Notes` export.
 
@@ -89,6 +89,26 @@ Layer settings are remembered per browser, so the map reopens the way it was lef
 Each section of the sidebar (except the town search and the selected-town cards) has a chevron
 beside its header that folds it down to the header, so the panel can be kept short. Folding
 never changes a layer's switch, and the browser remembers which sections are folded.
+
+## Branding
+
+The repo ships a neutral look. A company's title, colors, logo and fonts are set in `.env`
+(see `.env.example`), and the logo and font files go in the gitignored `data/` folder, so
+nothing company-specific is committed. Every variable is optional.
+
+| Variable | What it sets |
+|---|---|
+| `MAP_TITLE` | The header title and browser tab |
+| `BRAND_COLOR_DARK` | Header and headings |
+| `BRAND_COLOR_PRIMARY` | Switches, active buttons and links |
+| `BRAND_COLOR_SECONDARY` | The header gradient's far end (defaults to the primary) |
+| `BRAND_COLOR_ACCENT` | The header's bottom rule and the active preset |
+| `BRAND_LOGO` | A `.png`, `.svg` or `.webp` logo for the dark header |
+| `BRAND_FONT_HEADING`, `BRAND_FONT_BODY` | `.woff2` fonts (variable fonts cover every weight) |
+
+Colors must be hex (`#20245C`). Paths are relative to the project root. The logo and fonts
+are inlined into the page, so it still loads nothing but Leaflet and the tiles. A bad color
+or a missing file stops the build and names the variable.
 
 ## Which towns are in the dispatch set
 

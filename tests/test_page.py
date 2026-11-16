@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-from maybemap import page
+from maybemap import branding, page
 
 PAYLOAD = {
     "title": "Test & Map",
@@ -32,7 +32,14 @@ def test_payload_round_trips_and_cannot_close_its_script():
 
 def test_assets_are_inlined_and_markers_consumed():
     html = page.render(PAYLOAD)
-    for marker in ("__TITLE__", "/*__CSS__*/", "/*__JS__*/", "__PAYLOAD__"):
+    for marker in (
+        "__TITLE__",
+        "/*__BRAND__*/",
+        "__LOGO__",
+        "/*__CSS__*/",
+        "/*__JS__*/",
+        "__PAYLOAD__",
+    ):
         assert marker not in html
     assert "<title>Test &amp; Map</title>" in html
     assert "function renderZones" in html and ".layer-head" in html
@@ -155,7 +162,7 @@ def test_drive_time_destination_is_built_once_outside_the_card():
     # chosen destination lives in a top-level variable that renderCard() only reads
     source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
     html = (page.WEB_DIR / "template.html").read_text(encoding="utf-8")
-    assert "Drive time to…" in html
+    assert "Drive time from" in html
     assert re.search(r"^let driveToKey\b", source, re.M)
     card = re.search(r"^function renderCard\(\) \{.*?^\}$", source, re.M | re.S)
     assert card
@@ -232,12 +239,12 @@ def test_town_search_has_enter_and_escape():
     assert directory and "directoryHits(" in directory.group(0)
 
 
-def test_sidebar_order_is_search_then_destination_then_card_then_layers():
+def test_page_order_is_header_then_search_then_destination_then_card_then_layers():
     html = (page.WEB_DIR / "template.html").read_text(encoding="utf-8")
     offsets = [
         html.index(marker)
         for marker in (
-            'id="stats"',
+            'class="appbar"',
             'id="searchSection"',
             'id="driveToSection"',
             'id="selectedSection"',
@@ -374,3 +381,85 @@ def test_collapsing_only_changes_the_sidebar_not_the_map():
 def test_collapsed_sections_hide_only_their_body():
     css = (page.WEB_DIR / "app.css").read_text(encoding="utf-8")
     assert ".section.collapsed .layer-body,.section.collapsed .section-body{display:none}" in css
+
+
+BRANDED = branding.Branding(
+    title="unused",
+    dark="#20245C",
+    primary="#352B79",
+    secondary="#883F98",
+    accent="#FDB912",
+    logo="data:image/png;base64,TE9HTw==",
+    heading_font="data:font/woff2;base64,SEVBRA==",
+    body_font="data:font/woff2;base64,Qk9EWQ==",
+)
+
+
+def test_branding_is_inlined_and_the_logo_shown():
+    html = page.render(PAYLOAD, BRANDED)
+    assert ":root{--brand-dark:#20245C;--brand:#352B79;--brand-2:#883F98;--accent:#FDB912}" in html
+    assert "src:url(data:font/woff2;base64,SEVBRA==)" in html
+    assert "src:url(data:font/woff2;base64,Qk9EWQ==)" in html
+    assert '<img class="brand-logo" src="data:image/png;base64,TE9HTw==" alt="">' in html
+    # The brand block comes before the stylesheet that uses it
+    assert html.index("--brand-dark:") < html.index(".appbar{")
+
+
+def test_without_branding_the_page_is_neutral_and_the_logo_hidden():
+    html = page.render(PAYLOAD)
+    assert "@font-face" not in html
+    assert '<img class="brand-logo" src="" alt="" hidden>' in html
+    assert f"--brand-dark:{branding.Branding().dark}" in html
+
+
+def test_a_marker_inside_the_title_stays_literal():
+    # Markers are replaced in one pass, so a title can't pull the logo or the script into <title>
+    html = page.render({**PAYLOAD, "title": "__LOGO__ /*__JS__*/"}, BRANDED)
+    assert "<title>__LOGO__ /*__JS__*/</title>" in html
+
+
+def test_the_page_loads_nothing_but_leaflet_and_esri_tiles():
+    html = page.render(PAYLOAD, BRANDED)
+    for url in re.findall(r"https?://[^\s'\"<>)]+", html):
+        assert url.startswith(
+            ("https://unpkg.com/leaflet@1.9.4/", "https://server.arcgisonline.com/")
+        ) or url.startswith(("https://www.openstreetmap.org", "https://www.google.com/maps")), url
+
+
+def test_no_company_branding_is_committed_in_the_source():
+    # Company names, colors and assets come from .env; the tracked page and config stay neutral
+    root = page.WEB_DIR.parent
+    for path in [*page.WEB_DIR.iterdir(), root / "config.py", root / "branding.py"]:
+        text = path.read_text(encoding="utf-8").lower()
+        assert "socket" not in text, path
+        for color in ("#20245c", "#352b79", "#883f98", "#fdb912"):
+            assert color not in text, (path, color)
+
+
+def test_the_old_stats_strip_and_filler_copy_are_gone():
+    html = (page.WEB_DIR / "template.html").read_text(encoding="utf-8")
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    for gone in (
+        'id="stats"',
+        "panel-head",
+        "eyebrow",
+        "Independent switches",
+        "Town notes · Backup",
+    ):
+        assert gone not in html, gone
+    assert "$('#subtitle').textContent = 'Updated ' + D.builtAt;" in source
+
+
+def test_initial_fit_padding_leaves_room_on_a_landscape_phone():
+    # The header sits above #map, not over it, so the first fit needs no room for it.
+    # A 375px-tall phone in landscape leaves #map about 130px (57vh minus the
+    # 84px header); padding that eats more than that gives Leaflet a negative
+    # fit height and the page stops before the layers are built
+    source = (page.WEB_DIR / "app.js").read_text(encoding="utf-8")
+    fits = re.findall(r"map\.fitBounds\(startBounds,\s*\{([^}]*)\}", source)
+    assert fits, "no initial fitBounds found in app.js"
+    for options in fits:
+        vertical = 0
+        for key, y in re.findall(r"(padding\w*)\s*:\s*\[\s*\d+\s*,\s*(\d+)\s*\]", options):
+            vertical += int(y) * (2 if key == "padding" else 1)
+        assert vertical <= 60, options

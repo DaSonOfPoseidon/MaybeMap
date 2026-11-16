@@ -6,14 +6,18 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
 <style>
+/*__BRAND__*/
 /*__CSS__*/
 </style>
 </head>
 <body>
 <div id="map" aria-label="Interactive service map"></div>
 
-<header class="topbar">
-  <div class="topbar-text"><h1 id="title"></h1><div class="sub" id="subtitle"></div></div>
+<header class="appbar">
+  <div class="brand">
+    <img class="brand-logo" src="__LOGO__" alt="" hidden>
+    <div class="brand-text"><h1 id="title"></h1><div class="sub" id="subtitle"></div></div>
+  </div>
   <div class="presets" role="group" aria-label="Layer presets">
     <button type="button" data-preset="territory">Territory</button>
     <button type="button" data-preset="coverage">Coverage</button>
@@ -22,32 +26,26 @@
 </header>
 
 <aside class="sidebar">
-  <div class="panel-head"><strong>Map layers</strong><p>Switch on whatever you need. Every layer stacks with the others.</p></div>
-  <div class="stats" id="stats"></div>
-
   <div class="section" id="searchSection">
-    <div class="eyebrow">Find a town or tech</div>
-    <input id="townFilter" class="select" type="search" placeholder="Search towns, techs, regions or notes" autocomplete="off">
+    <label class="section-title" for="townFilter">Search</label>
+    <input id="townFilter" class="select" type="search" placeholder="Town, tech, region or note" autocomplete="off">
     <div id="directory" class="directory"></div>
   </div>
 
   <div class="section selected-section" id="driveToSection" hidden>
-    <label class="eyebrow" for="driveToSearch">Drive time to… · from <span id="driveToFrom"></span></label>
+    <label class="section-title" for="driveToSearch">Drive time from <span id="driveToFrom"></span></label>
     <div id="driveTo"></div>
   </div>
 
   <div class="section selected-section" id="selectedSection" hidden>
-    <div class="selected-head">
-      <div class="eyebrow">Selected town</div>
-      <button type="button" class="linkbtn" id="clearSelection">Close</button>
-    </div>
+    <button type="button" class="linkbtn close-card" id="clearSelection">Close</button>
     <div id="selectedCard"></div>
   </div>
 
   <section class="section layer" data-layer="zones" id="zonesSection">
     <div class="section-head">
       <label class="layer-head" for="layer-zones">
-        <span><span class="eyebrow">Layer</span><b>Zones</b><small id="zonesHint"></small></span>
+        <span><b>Zones</b><small id="zonesHint"></small></span>
         <input type="checkbox" role="switch" id="layer-zones">
       </label>
       <button type="button" class="collapse-btn" data-name="Zones" aria-expanded="true" aria-controls="zonesBody" aria-label="Collapse Zones"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
@@ -55,7 +53,7 @@
     <div class="layer-body" id="zonesBody">
       <div id="zoneToggles"></div>
       <div class="label-controls"><button type="button" data-all="zones" data-on="1">Show all</button><button type="button" data-all="zones" data-on="0">Hide all</button></div>
-      <label class="label-toggle" for="zoneLabels"><span><b>Zone labels</b><small>Names at each zone's center</small></span><input type="checkbox" role="switch" id="zoneLabels"></label>
+      <label class="label-toggle" for="zoneLabels"><span><b>Zone labels</b></span><input type="checkbox" role="switch" id="zoneLabels"></label>
       <div class="field-label">Fill strength</div>
       <div class="seg seg3" id="zoneOpacity">
         <button type="button" data-value="light">Light</button>
@@ -68,33 +66,33 @@
   <section class="section layer" data-layer="outlines" id="outlinesSection">
     <div class="section-head">
       <label class="layer-head" for="layer-outlines">
-        <span><span class="eyebrow">Layer</span><b>City outlines</b><small id="outlinesHint"></small></span>
+        <span><b>City outlines</b><small id="outlinesHint"></small></span>
         <input type="checkbox" role="switch" id="layer-outlines">
       </label>
       <button type="button" class="collapse-btn" data-name="City outlines" aria-expanded="true" aria-controls="outlinesBody" aria-label="Collapse City outlines"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </div>
     <div class="layer-body" id="outlinesBody">
-      <p class="route-note">Real OSM city limits for every town in a region. Shaded in its zone's color while Zones is on, otherwise in its region's color. Region and customer filters below apply here too.</p>
+      <p class="route-note">City limits from OpenStreetMap, for towns with a region.</p>
     </div>
   </section>
 
   <section class="section layer" data-layer="dots" id="dotsSection">
     <div class="section-head">
       <label class="layer-head" for="layer-dots">
-        <span><span class="eyebrow">Layer</span><b>City dots</b><small id="dotsHint"></small></span>
+        <span><b>City dots</b><small id="dotsHint"></small></span>
         <input type="checkbox" role="switch" id="layer-dots">
       </label>
       <button type="button" class="collapse-btn" data-name="City dots" aria-expanded="true" aria-controls="dotsBody" aria-label="Collapse City dots"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </div>
     <div class="layer-body" id="dotsBody">
-      <p class="route-note">One dot for every serviced town, in its region's color. Towns with no region are gray.</p>
+      <p class="route-note">Every serviced town, colored by region.</p>
     </div>
   </section>
 
   <section class="section" id="filterSection">
     <div class="section-head">
-      <div class="eyebrow">Town filters · Dots and outlines</div>
-      <button type="button" class="collapse-btn" data-name="Town filters" aria-expanded="true" aria-controls="filterBody" aria-label="Collapse Town filters"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <h2 class="section-title">Filters</h2>
+      <button type="button" class="collapse-btn" data-name="Filters" aria-expanded="true" aria-controls="filterBody" aria-label="Collapse Filters"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </div>
     <div class="section-body" id="filterBody">
       <div class="field-label">Customers</div>
@@ -110,7 +108,7 @@
   <section class="section layer" data-layer="dispatch" id="dispatchSection">
     <div class="section-head">
       <label class="layer-head" for="layer-dispatch">
-        <span><span class="eyebrow">Layer</span><b>Dispatch</b><small id="dispatchHint"></small></span>
+        <span><b>Dispatch</b><small id="dispatchHint"></small></span>
         <input type="checkbox" role="switch" id="layer-dispatch">
       </label>
       <button type="button" class="collapse-btn" data-name="Dispatch" aria-expanded="true" aria-controls="dispatchBody" aria-label="Collapse Dispatch"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
@@ -124,31 +122,31 @@
         <button type="button" data-mode="none">No lines</button>
       </div>
       <div id="deptSection">
-        <div class="field-label">Departments · which techs count</div>
+        <div class="field-label">Departments</div>
         <div class="seg seg3" id="deptButtons"></div>
       </div>
       <div class="inline-field"><label for="count">Connections per town</label><select id="count" class="select"><option value="1">1 nearest</option><option value="2">2 nearest</option></select></div>
-      <label class="label-toggle" for="showTechNames"><span><b>Tech names</b><small id="techNamesHint"></small></span><input type="checkbox" role="switch" id="showTechNames"></label>
-      <label class="label-toggle" for="showTownNames"><span><b>Town names</b><small id="townNamesHint"></small></span><input type="checkbox" role="switch" id="showTownNames"></label>
+      <label class="label-toggle" for="showTechNames"><span><b>Tech names</b></span><input type="checkbox" role="switch" id="showTechNames"></label>
+      <label class="label-toggle" for="showTownNames"><span><b>Town names</b></span><input type="checkbox" role="switch" id="showTownNames"></label>
       <p class="route-note" id="unplacedNote" hidden></p>
-      <p class="route-note">Drive miles and times are OSRM's fastest route between town centers, without live traffic, worked out when the map was built. Lines are connectors, not road shapes.</p>
+      <p class="route-note">Drive times are from OSRM, without traffic. Lines are straight connectors, not roads.</p>
     </div>
   </section>
 
   <section class="section" id="stagingSection">
     <div class="section-head">
-      <div class="eyebrow">Staging sites · Independent switches</div>
+      <h2 class="section-title">Staging sites</h2>
       <button type="button" class="collapse-btn" data-name="Staging sites" aria-expanded="true" aria-controls="stagingBody" aria-label="Collapse Staging sites"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </div>
     <div class="section-body" id="stagingBody">
       <div id="stagingToggles"></div>
-      <div class="staging-controls"><button type="button" data-all="staging" data-on="1">Show all staging</button><button type="button" data-all="staging" data-on="0">Hide all staging</button></div>
+      <div class="staging-controls"><button type="button" data-all="staging" data-on="1">Show all</button><button type="button" data-all="staging" data-on="0">Hide all</button></div>
     </div>
   </section>
 
   <section class="section" id="basemapSection">
     <div class="section-head">
-      <div class="eyebrow">Basemap</div>
+      <h2 class="section-title">Basemap</h2>
       <button type="button" class="collapse-btn" data-name="Basemap" aria-expanded="true" aria-controls="basemapBody" aria-label="Collapse Basemap"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </div>
     <div class="section-body" id="basemapBody">
@@ -157,23 +155,22 @@
         <button type="button" data-value="satellite">Satellite</button>
         <button type="button" data-value="streets">Streets</button>
       </div>
-      <label class="label-toggle" for="placeLabels"><span><b>Basemap place names</b><small id="placeLabelsHint"></small></span><input type="checkbox" role="switch" id="placeLabels"></label>
+      <label class="label-toggle" for="placeLabels"><span><b>Place names</b></span><input type="checkbox" role="switch" id="placeLabels"></label>
     </div>
   </section>
 
   <section class="section" id="notesSection">
     <div class="section-head">
-      <div class="eyebrow">Town notes · Backup</div>
-      <button type="button" class="collapse-btn" data-name="Town notes" aria-expanded="true" aria-controls="notesBody" aria-label="Collapse Town notes"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <h2 class="section-title">Notes</h2>
+      <button type="button" class="collapse-btn" data-name="Notes" aria-expanded="true" aria-controls="notesBody" aria-label="Collapse Notes"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </div>
     <div class="section-body" id="notesBody">
-      <p class="notehelp">Notes save in this browser only. Export a CSV to back them up or share them with the team, and import one to load them on another device.</p>
+      <p class="notehelp">Notes are saved in this browser only. Export them to back up or share.</p>
       <div class="btnrow">
-        <button class="action" id="notesExport" type="button">Export notes CSV</button>
-        <button class="action secondary" id="notesImportBtn" type="button">Import notes CSV</button>
+        <button class="action" id="notesExport" type="button">Export CSV</button>
+        <button class="action secondary" id="notesImportBtn" type="button">Import CSV</button>
       </div>
       <input type="file" id="notesImportInput" accept=".csv,text/csv" hidden>
-      <p class="fineprint" id="builtAt"></p>
     </div>
   </section>
 </aside>
