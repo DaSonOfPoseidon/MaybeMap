@@ -212,6 +212,26 @@ def test_customer_buckets_cover_zero(built):
     # A town listed with no customers must land in a bucket, or no filter can hide it
     first = built["buckets"][0]
     assert first["lo"] == 0 and first["label"] == "0-5"
+    # Every bucket carries the dot radius the page draws for it
+    assert all(isinstance(b["r"], (int, float)) and b["r"] > 0 for b in built["buckets"])
+    assert [(b["label"], b["lo"], b["hi"], b["r"]) for b in built["buckets"]] == list(
+        config.CUSTOMER_BUCKETS
+    )
+
+
+def test_customer_buckets_are_contiguous_ascending_and_only_the_last_is_open():
+    # One list sizes the dots and builds the filter, so a gap would leave a count in no group
+    assert config.CUSTOMER_BUCKETS[0][1] == 0
+    for (_, _, prev_hi, prev_r), (_, lo, _, r) in zip(
+        config.CUSTOMER_BUCKETS, config.CUSTOMER_BUCKETS[1:], strict=False
+    ):
+        assert prev_hi is not None and lo == prev_hi + 1
+        assert r > prev_r
+    assert [hi is None for _, _, hi, _ in config.CUSTOMER_BUCKETS] == [False] * (
+        len(config.CUSTOMER_BUCKETS) - 1
+    ) + [True]
+    # Labels are unique, since they are the filter's button text
+    assert len({label for label, *_ in config.CUSTOMER_BUCKETS}) == len(config.CUSTOMER_BUCKETS)
 
 
 def test_techs_carry_their_basis_and_departments(built):

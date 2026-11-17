@@ -10,8 +10,8 @@ from maybemap import geocoding
 from maybemap.states import state_full
 
 # City, State, Group, Customers, Service Mix, lat, lon. The last entry sits well
-# outside Missouri, and between them the counts span every filter bucket including
-# the open-ended top one.
+# outside Missouri. The counts are small and only reach the first few customer groups;
+# the region-hub tests depend on these exact numbers, so don't widen them to cover every group.
 FIXTURE_CITIES = [
     ("Kansas City", "MO", "Group 1: West", 8, "Mixed", 39.0997, -94.5786),
     ("Columbia", "MO", "Group 2: Central", 25, "Mixed", 38.9517, -92.3341),

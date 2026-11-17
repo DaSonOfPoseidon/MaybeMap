@@ -9,6 +9,7 @@ import subprocess
 import pytest
 
 from maybemap import colors
+from maybemap.config import CUSTOMER_BUCKETS
 from maybemap.page import WEB_DIR
 
 NODE = shutil.which("node")
@@ -30,7 +31,6 @@ NAMES = (
     "pinIsOrange",
     "directoryHits",
     "collapsedSet",
-    "DOT_TIERS",
     "MISSING_DOT",
     "dotRadius",
     "THEMES",
@@ -402,30 +402,34 @@ def test_collapsed_set_keeps_a_valid_id_once():
     assert _collapsed([]) == []
 
 
+# The buckets as the build writes them into the payload: the filter and the dot size share them
+PAYLOAD_BUCKETS = json.dumps(
+    [{"label": label, "lo": lo, "hi": hi, "r": r} for label, lo, hi, r in CUSTOMER_BUCKETS]
+)
+
+
 def _radii(counts):
-    return _run(f"{json.dumps(counts)}.map(n => dotRadius(n))")
+    return _run(f"{json.dumps(counts)}.map(n => dotRadius(n, {PAYLOAD_BUCKETS}))")
 
 
-def test_dot_radius_is_a_tier_per_customer_count_and_handles_missing_counts():
+def test_dot_radius_is_a_group_per_customer_count_and_handles_missing_counts():
     missing = _run("MISSING_DOT")
     assert missing == 2.5
     # No count, an empty count, a negative one and NaN (JSON turns it into null) get the missing dot
-    assert _run("[null, undefined, NaN, 0, -5].map(n => dotRadius(n))") == [missing] * 5
-    # Every tier boundary: the last count of a tier and the first of the next
-    edges = _radii([1, 9, 10, 24, 25, 99, 100, 249, 250, 999, 1000, 26705])
-    assert edges == [3, 3, 4, 4, 5, 5, 6, 6, 7.5, 7.5, 9, 9]
-    # Anything past the top tier stays in it, and a count between 0 and 1 still gets the first tier
-    assert _radii([26705, 1e9]) == [9, 9]
-    assert _radii([0.5]) == [3]
+    bad = _run(f"[null, undefined, NaN, 0, -5].map(n => dotRadius(n, {PAYLOAD_BUCKETS}))")
+    assert bad == [missing] * 5
+    # Every group boundary: the last count of a group and the first of the next
+    edges = _radii([1, 5, 6, 24, 25, 99, 100, 499, 500, 999, 1000, 4999, 5000, 9999, 10000, 26705])
+    assert edges == [3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8.5, 8.5, 10, 10, 12, 12]
+    # Anything past the top group stays in it, and a fractional count falls into the group below
+    assert _radii([26705, 1e9]) == [12, 12]
+    assert _radii([0.5, 5.5, 24.5]) == [3, 3, 4]
     # Growing with the count, every radius finite and above the missing dot
-    counts = [1, 10, 50, 100, 250, 500, 1000, 5000, 10000, 26705]
-    radii = _radii(counts)
+    radii = _radii([1, 10, 50, 100, 250, 500, 1000, 5000, 10000, 26705])
     assert radii == sorted(radii)
     assert all(missing < r < 100 for r in radii)
-    # The tiers themselves are ascending, so the lookup keeps the highest one reached
-    tiers = _run("DOT_TIERS")
-    assert [t["lo"] for t in tiers] == sorted(t["lo"] for t in tiers)
-    assert [t["r"] for t in tiers] == sorted(t["r"] for t in tiers)
+    # Medium, large and XL towns get clearly different dots
+    assert len(set(_radii([100, 500, 1000, 5000, 10000]))) == 5
 
 
 def test_the_toggle_flips_the_page_and_returns_to_following_the_system():
