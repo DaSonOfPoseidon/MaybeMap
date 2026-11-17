@@ -1,5 +1,7 @@
 # Small color helpers. Plain hex arithmetic, so the build needs no matplotlib.
 
+import math
+
 
 def _rgb(hex_color: str) -> tuple[int, int, int]:
     value = hex_color.lstrip("#")
@@ -63,3 +65,47 @@ def readable(bg: str, ink: str | None = None, target: float = AAA_TEXT) -> tuple
         step += 1
         out = _toward(bg, away, step / 50)
     return out, ink
+
+
+def _oklch(hex_color: str) -> tuple[float, float, float]:
+    # sRGB hex to OKLCH (lightness, chroma, hue in radians)
+    lin = [
+        s / 12.92 if s <= 0.04045 else ((s + 0.055) / 1.055) ** 2.4
+        for s in (c / 255 for c in _rgb(hex_color))
+    ]
+    r, g, b = lin
+    lms = [
+        (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3),
+        (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3),
+        (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3),
+    ]
+    lk = 0.2104542553 * lms[0] + 0.7936177850 * lms[1] - 0.0040720468 * lms[2]
+    a = 1.9779984951 * lms[0] - 2.4285922050 * lms[1] + 0.4505937099 * lms[2]
+    bb = 0.0259040371 * lms[0] + 0.7827717662 * lms[1] - 0.8086757660 * lms[2]
+    return lk, math.hypot(a, bb), math.atan2(bb, a)
+
+
+def _from_oklch(lk: float, c: float, h: float) -> str:
+    a, b = c * math.cos(h), c * math.sin(h)
+    l_ = (lk + 0.3963377774 * a + 0.2158037573 * b) ** 3
+    m_ = (lk - 0.1055613458 * a - 0.0638541728 * b) ** 3
+    s_ = (lk - 0.0894841775 * a - 1.2914855480 * b) ** 3
+    lin = (
+        4.0767416621 * l_ - 3.3077115913 * m_ + 0.2309699292 * s_,
+        -1.2684380046 * l_ + 2.6097574011 * m_ - 0.3413193965 * s_,
+        -0.0041960863 * l_ - 0.7034186147 * m_ + 1.7076147010 * s_,
+    )
+    # Clamped to sRGB the way a browser maps an out-of-gamut color
+    out = [max(0.0, min(1.0, x)) for x in lin]
+    enc = [12.92 * x if x <= 0.0031308 else 1.055 * x ** (1 / 2.4) - 0.055 for x in out]
+    return "#" + "".join(f"{round(x * 255):02x}" for x in enc)
+
+
+def lift_lightness(hex_color: str, floor: float) -> str:
+    # The color with its OKLCH lightness raised to the floor, hue and chroma kept. This is what
+    # the CSS relative color oklch(from c max(l, floor) c h) gives, computed here so older
+    # browsers that cannot parse relative colors still get a plain hex value
+    lk, c, h = _oklch(hex_color)
+    if lk >= floor:
+        return hex_color.lower()
+    return _from_oklch(floor, c, h)

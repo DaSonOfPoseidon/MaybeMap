@@ -2,7 +2,6 @@
 # script block.
 
 import json
-import math
 import re
 
 import pytest
@@ -400,7 +399,8 @@ def test_branding_is_inlined_and_the_logo_shown():
     html = page.render(PAYLOAD, BRANDED)
     assert (
         ":root{--brand-dark:#20245C;--brand:#352B79;--brand-2:#883F98;"
-        "--brand-2-deep:#803b8f;--accent:#FDB912}"
+        "--brand-2-deep:#803b8f;--accent:#FDB912;"
+        "--heading-dark:#bbc9ff;--brand-ui-dark:#adacff}"
     ) in html
     assert "src:url(data:font/woff2;base64,SEVBRA==)" in html
     assert "src:url(data:font/woff2;base64,Qk9EWQ==)" in html
@@ -628,15 +628,16 @@ def test_both_dark_blocks_define_the_same_tokens_with_one_body():
         assert name + ":" in root, name
 
 
-def test_dark_brand_colors_are_derived_never_hardcoded():
+def test_dark_brand_colors_come_from_build_time_tokens_never_hardcoded():
     css = (page.WEB_DIR / "app.css").read_text(encoding="utf-8")
     auto, _ = _dark_blocks(css)
     brand_ui = re.search(r"--brand-ui:([^;]*)", auto).group(1)
     heading = re.search(r"--heading:([^;]*)", auto).group(1)
-    # Same hue and chroma as the brand variable, only the lightness is floored
-    assert re.fullmatch(r"oklch\(from var\(--brand\) max\(l,\.\d+\) c h\)", brand_ui), brand_ui
-    assert re.fullmatch(r"oklch\(from var\(--brand-dark\) max\(l,\.\d+\) c h\)", heading), heading
-    # The brand tokens here name no hex color, and the blocks never redefine the brand itself
+    # The lifted brand colors are computed in branding.py, so no CSS relative color is left for
+    # browsers that cannot parse one
+    assert brand_ui == "var(--brand-ui-dark)" and heading == "var(--heading-dark)"
+    assert "oklch(from" not in css
+    # The blocks name no hex color for them, and never redefine the brand itself
     assert "#" not in brand_ui + heading
     assert "--brand:" not in auto and "--brand-dark:" not in auto
 
@@ -686,35 +687,6 @@ def test_reset_keeps_the_theme_and_the_basemap_follows_it():
 # ---------- AAA text contrast (WCAG 1.4.6: 7:1 for normal-size text) ----------
 
 
-def _oklch(rgb):
-    lin = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in rgb]
-    r, g, b = lin
-    lms = [
-        (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3),
-        (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3),
-        (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3),
-    ]
-    lk = 0.2104542553 * lms[0] + 0.7936177850 * lms[1] - 0.0040720468 * lms[2]
-    a = 1.9779984951 * lms[0] - 2.4285922050 * lms[1] + 0.4505937099 * lms[2]
-    bb = 0.0259040371 * lms[0] + 0.7827717662 * lms[1] - 0.8086757660 * lms[2]
-    return lk, math.hypot(a, bb), math.atan2(bb, a)
-
-
-def _from_oklch(lk, c, h):
-    a, b = c * math.cos(h), c * math.sin(h)
-    l_ = (lk + 0.3963377774 * a + 0.2158037573 * b) ** 3
-    m_ = (lk - 0.1055613458 * a - 0.0638541728 * b) ** 3
-    s_ = (lk - 0.0894841775 * a - 1.2914855480 * b) ** 3
-    lin = (
-        4.0767416621 * l_ - 3.3077115913 * m_ + 0.2309699292 * s_,
-        -1.2684380046 * l_ + 2.6097574011 * m_ - 0.3413193965 * s_,
-        -0.0041960863 * l_ - 0.7034186147 * m_ + 1.7076147010 * s_,
-    )
-    # Clamped to sRGB the way a browser maps an out-of-gamut color
-    out = [max(0.0, min(1.0, x)) for x in lin]
-    return [12.92 * x if x <= 0.0031308 else 1.055 * x ** (1 / 2.4) - 0.055 for x in out]
-
-
 def _rgba(hex_color):
     h = hex_color.lstrip("#")
     if len(h) in (3, 4):
@@ -732,13 +704,13 @@ def _tokens(body):
 
 
 def _resolve(name, tokens):
-    # A token's color as #rrggbb, translucent ones laid over the map background
+    # A token's color as #rrggbb, translucent ones laid over the map background; a literal #rrggbb
+    # (white text on the brand) stands for itself
+    if name.startswith("#"):
+        return name
     value = tokens[name].strip()
     if m := re.fullmatch(r"var\((--[a-z0-9-]+)\)", value):
         return _resolve(m.group(1), tokens)
-    if m := re.fullmatch(r"oklch\(from var\((--[a-z0-9-]+)\) max\(l,([.\d]+)\) c h\)", value):
-        lk, c, h = _oklch(_rgba(_resolve(m.group(1), tokens))[0])
-        return _hex(_from_oklch(max(lk, float(m.group(2))), c, h))
     rgb, alpha = _rgba(value)
     if alpha < 1:
         base = _rgba(_resolve("--map-bg", tokens))[0]
@@ -764,6 +736,9 @@ TEXT_PAIRS = [
     ("--market-tip-ink", ("--market-tip-bg",)),
     ("--market-tip-name", ("--market-tip-bg",)),
     ("--edge-tip-ink", ("--edge-tip-bg",)),
+    # White on the primary button (.action), and the dark ink on the active preset's accent fill
+    ("#ffffff", ("--brand",)),
+    ("--brand-dark", ("--accent",)),
 ]
 
 
@@ -778,14 +753,9 @@ def _theme_tokens(theme, brand):
 @pytest.mark.parametrize("brand", [BRANDED, branding.Branding()], ids=["branded", "default"])
 @pytest.mark.parametrize("theme", ["light", "dark"])
 def test_every_text_color_reaches_aaa_contrast_on_its_backgrounds(theme, brand):
-    if theme == "light" and brand != BRANDED:
-        # Light brand text is the brand's own color, so only the real brand is held to it here
-        pairs = [(fg, bgs) for fg, bgs in TEXT_PAIRS if fg not in ("--heading", "--brand-ui")]
-    else:
-        pairs = TEXT_PAIRS
     tokens = _theme_tokens(theme, brand)
     fails = []
-    for fg, bgs in pairs:
+    for fg, bgs in TEXT_PAIRS:
         for bg in bgs:
             back = _seg_active(tokens) if bg == "seg-active" else _resolve(bg, tokens)
             ratio = colors.contrast(_resolve(fg, tokens), back)
