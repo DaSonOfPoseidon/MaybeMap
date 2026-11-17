@@ -704,7 +704,10 @@ def _tokens(body):
 
 
 def _resolve(name, tokens):
-    # A token's color as #rrggbb, translucent ones laid over the map background
+    # A token's color as #rrggbb, translucent ones laid over the map background; a literal #rrggbb
+    # (white text on the brand) stands for itself
+    if name.startswith("#"):
+        return name
     value = tokens[name].strip()
     if m := re.fullmatch(r"var\((--[a-z0-9-]+)\)", value):
         return _resolve(m.group(1), tokens)
@@ -733,6 +736,9 @@ TEXT_PAIRS = [
     ("--market-tip-ink", ("--market-tip-bg",)),
     ("--market-tip-name", ("--market-tip-bg",)),
     ("--edge-tip-ink", ("--edge-tip-bg",)),
+    # White on the primary button (.action), and the dark ink on the active preset's accent fill
+    ("#ffffff", ("--brand",)),
+    ("--brand-dark", ("--accent",)),
 ]
 
 
@@ -747,14 +753,9 @@ def _theme_tokens(theme, brand):
 @pytest.mark.parametrize("brand", [BRANDED, branding.Branding()], ids=["branded", "default"])
 @pytest.mark.parametrize("theme", ["light", "dark"])
 def test_every_text_color_reaches_aaa_contrast_on_its_backgrounds(theme, brand):
-    if theme == "light" and brand != BRANDED:
-        # Light brand text is the brand's own color, so only the real brand is held to it here
-        pairs = [(fg, bgs) for fg, bgs in TEXT_PAIRS if fg not in ("--heading", "--brand-ui")]
-    else:
-        pairs = TEXT_PAIRS
     tokens = _theme_tokens(theme, brand)
     fails = []
-    for fg, bgs in pairs:
+    for fg, bgs in TEXT_PAIRS:
         for bg in bgs:
             back = _seg_active(tokens) if bg == "seg-active" else _resolve(bg, tokens)
             ratio = colors.contrast(_resolve(fg, tokens), back)

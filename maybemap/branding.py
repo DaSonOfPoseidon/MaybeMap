@@ -19,9 +19,9 @@ DEFAULT_TITLE = "Service Coverage Map"
 # (variable, default). A secondary color left unset follows the primary
 COLORS = {
     "dark": ("BRAND_COLOR_DARK", "#1f2a44"),
-    "primary": ("BRAND_COLOR_PRIMARY", "#2f5d8a"),
+    "primary": ("BRAND_COLOR_PRIMARY", "#274e74"),
     "secondary": ("BRAND_COLOR_SECONDARY", None),
-    "accent": ("BRAND_COLOR_ACCENT", "#e0a526"),
+    "accent": ("BRAND_COLOR_ACCENT", "#e3ae3c"),
 }
 LOGO_TYPES = {".png": "image/png", ".svg": "image/svg+xml", ".webp": "image/webp"}
 FONT_TYPES = {".woff2": "font/woff2"}
