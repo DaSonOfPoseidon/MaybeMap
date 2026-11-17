@@ -99,7 +99,8 @@ def test_css_sets_the_variables_and_only_the_fonts_given():
     css = branding.css(branding.Branding(heading_font="data:font/woff2;base64,AA=="))
     assert (
         ":root{--brand-dark:#1f2a44;--brand:#2f5d8a;--brand-2:#2f5d8a;"
-        "--brand-2-deep:#2e5b87;--accent:#e0a526}"
+        "--brand-2-deep:#2e5b87;--accent:#e0a526;"
+        "--heading-dark:#becef0;--brand-ui-dark:#8bbcef}"
     ) in css
     assert "font-family:MapHeading;src:url(data:font/woff2;base64,AA==)" in css
     assert "MapBody" not in css

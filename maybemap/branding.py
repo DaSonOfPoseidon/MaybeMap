@@ -10,7 +10,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from maybemap.colors import WHITE, readable
+from maybemap.colors import WHITE, lift_lightness, readable
 from maybemap.config import PROJECT_ROOT
 
 load_dotenv(PROJECT_ROOT / ".env")
@@ -26,6 +26,9 @@ COLORS = {
 LOGO_TYPES = {".png": "image/png", ".svg": "image/svg+xml", ".webp": "image/webp"}
 FONT_TYPES = {".woff2": "font/woff2"}
 HEX = re.compile(r"#[0-9a-fA-F]{6}")
+# The dark theme lifts a brand color's OKLCH lightness to at least these, to read on dark panels
+DARK_HEADING_FLOOR = 0.85
+DARK_BRAND_UI_FLOOR = 0.78
 
 
 @dataclass(frozen=True)
@@ -90,9 +93,14 @@ def css(b: Branding) -> str:
     # The preset buttons' white text sits on the gradient's secondary end, so that end is
     # darkened as far as AAA contrast needs (a dark enough secondary passes unchanged)
     deep, _ = readable(b.secondary, ink=WHITE)
+    # The dark theme's lifted heading and link colors are computed here, not with a CSS relative
+    # color, which Firefox before 128, Safari before 16.4 and Chrome before 119 cannot parse
+    heading_dark = lift_lightness(b.dark, DARK_HEADING_FLOOR)
+    brand_ui_dark = lift_lightness(b.primary, DARK_BRAND_UI_FLOOR)
     rules = [
         f":root{{--brand-dark:{b.dark};--brand:{b.primary};"
-        f"--brand-2:{b.secondary};--brand-2-deep:{deep};--accent:{b.accent}}}"
+        f"--brand-2:{b.secondary};--brand-2-deep:{deep};--accent:{b.accent};"
+        f"--heading-dark:{heading_dark};--brand-ui-dark:{brand_ui_dark}}}"
     ]
     for family, uri in (("MapHeading", b.heading_font), ("MapBody", b.body_font)):
         if uri:
