@@ -13,7 +13,7 @@ from shapely.geometry import mapping
 
 from maybemap import routing
 from maybemap.branding import Branding, load_branding
-from maybemap.colors import darken
+from maybemap.colors import darken, readable
 from maybemap.config import (
     CITY_DATA_PATH,
     COORD_PRECISION,
@@ -70,13 +70,19 @@ def build_zones(zones: gpd.GeoDataFrame) -> dict:
     features = []
     for row in zones.itertuples(index=False):
         anchor = row.geometry.representative_point()
+        edge = darken(row.Color, 0.25)
+        # The label's text color, and its box moved off the edge color only as far as AAA
+        # contrast needs
+        label_bg, label_ink = readable(edge)
         features.append(
             _feature(
                 row.geometry,
                 {
                     "label": row.Label,
                     "color": row.Color,
-                    "edge": darken(row.Color, 0.25),
+                    "edge": edge,
+                    "label_bg": label_bg,
+                    "label_ink": label_ink,
                     "anchor": [round(anchor.y, 5), round(anchor.x, 5)],
                 },
             )

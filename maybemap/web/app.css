@@ -1,11 +1,11 @@
 /* Brand colors (--brand-dark, --brand, --brand-2, --accent) and fonts come from the build's branding
    block above. These are the neutrals and the map's own data colors */
-:root{color-scheme:light;--ink:#1d2433;--muted:#5d6676;--line:#e3e6ec;--panel:#fff;--hover:#f3f4f8;--field:#c9ced8;--orange:#f3a331;--teal:#0bb1c6;--bar:56px;--side:340px;
+:root{color-scheme:light;--ink:#1d2433;--muted:#4a5262;--line:#e3e6ec;--panel:#fff;--hover:#f3f4f8;--field:#c9ced8;--orange:#f3a331;--teal:#0bb1c6;--bar:56px;--side:340px;
   --surface:#fff;--pop:#fff;--map-bg:#dfe3e8;--scroll:#c3c8d2;--switch-off:#c3c8d2;--knob-on:#fff;--shadow:#0000000f;--sw-edge:transparent;
-  --heading:var(--brand-dark);--brand-ui:var(--brand);--link:#0078a8;--ctl-hover:#f4f4f4;--attr-bg:#fffc;
-  --tech-ink:#9b5600;--tech-bg:#fdebd0;
+  --heading:var(--brand-dark);--brand-ui:var(--brand);--link:#00597c;--ctl-hover:#f4f4f4;--attr-bg:#fff;
+  --tech-ink:#764100;--tech-bg:#fdebd0;
   --tech-tip-bg:#fffef8f5;--tech-tip-ink:#14344b;--tech-tip-sub:#3f5769;
-  --market-tip-bg:#eafafff5;--market-tip-ink:#12334b;--market-tip-name:#116995;
+  --market-tip-bg:#eafafff5;--market-tip-ink:#12334b;--market-tip-name:#0b5578;
   --edge-tip-bg:#fffffff5;--edge-tip-ink:#133c56;--edge-tip-line:#8eb4c9;
   --head-font:MapHeading,"Arial Narrow",system-ui,sans-serif;--body-font:MapBody,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
 /* Dark theme: the same tokens with dark values, in two blocks with one body. The first follows the system
@@ -16,7 +16,7 @@
 :root:not([data-theme="light"]){
   color-scheme:dark;
   --ink:#e4e8f0;
-  --muted:#9ba4b6;
+  --muted:#b3bccc;
   --line:#2c3342;
   --panel:#171c26;
   --hover:#212836;
@@ -30,11 +30,11 @@
   --shadow:#00000066;
   --sw-edge:#ffffff40;
   --heading:oklch(from var(--brand-dark) max(l,.85) c h);
-  --brand-ui:oklch(from var(--brand) max(l,.72) c h);
+  --brand-ui:oklch(from var(--brand) max(l,.78) c h);
   --link:#6cb8d9;
   --ctl-hover:#232a38;
-  --attr-bg:#171c26cc;
-  --tech-ink:#f0a94a;
+  --attr-bg:#171c26;
+  --tech-ink:#f0ab4e;
   --tech-bg:#3a2a12;
   --tech-tip-bg:#2a2418f5;
   --tech-tip-ink:#fde7c2;
@@ -49,7 +49,7 @@
 :root[data-theme="dark"]{
   color-scheme:dark;
   --ink:#e4e8f0;
-  --muted:#9ba4b6;
+  --muted:#b3bccc;
   --line:#2c3342;
   --panel:#171c26;
   --hover:#212836;
@@ -63,11 +63,11 @@
   --shadow:#00000066;
   --sw-edge:#ffffff40;
   --heading:oklch(from var(--brand-dark) max(l,.85) c h);
-  --brand-ui:oklch(from var(--brand) max(l,.72) c h);
+  --brand-ui:oklch(from var(--brand) max(l,.78) c h);
   --link:#6cb8d9;
   --ctl-hover:#232a38;
-  --attr-bg:#171c26cc;
-  --tech-ink:#f0a94a;
+  --attr-bg:#171c26;
+  --tech-ink:#f0ab4e;
   --tech-bg:#3a2a12;
   --tech-tip-bg:#2a2418f5;
   --tech-tip-ink:#fde7c2;
@@ -94,7 +94,7 @@ path.leaflet-interactive:focus{outline:none}
 /* Header bar: the logo (it resets the map) on the left, the title centered, and the presets that flip
    layer switches on the right. Equal outer columns keep the title on the page's center line */
 .appbar{position:absolute;z-index:1100;top:0;left:0;right:0;height:var(--bar);display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:16px;padding:0 16px;color:#fff;
-  background:linear-gradient(90deg,var(--brand-dark),var(--brand-2));border-bottom:3px solid var(--accent)}
+  background:linear-gradient(90deg,var(--brand-dark),var(--brand-2-deep));border-bottom:3px solid var(--accent)}
 .home{justify-self:start;display:flex;align-items:center;padding:4px;margin-left:-4px;border:0;border-radius:4px;background:transparent;color:#fff;cursor:pointer}
 .home:hover{background:#ffffff1f}
 .home:focus-visible{outline-color:var(--accent)}
@@ -123,8 +123,12 @@ path.leaflet-interactive:focus{outline:none}
 .layer-head{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer}
 .layer-head b{display:block;font:700 17px/1.2 var(--head-font);color:var(--heading);letter-spacing:.2px}
 .layer-head small{display:block;color:var(--muted);font-size:12px;margin-top:1px}
-.layer-body{margin-top:4px;transition:opacity .15s}
-.layer.off .layer-body{opacity:.45}
+.layer-body{margin-top:4px}
+/* An off layer's controls still work, so its text stays readable: it turns --muted (7:1 like all text)
+   instead of fading, and only the swatches and switches dim */
+.layer.off .layer-body{--ink:var(--muted);--heading:var(--muted);--brand-ui:var(--muted);--tech-ink:var(--muted)}
+.layer.off .layer-body .seg button.active{background:var(--surface)}
+.layer.off .layer-body :is(.swatch,input){opacity:.45}
 
 /* Collapsing: a chevron beside each header hides the section's body. It is not a switch, and the
    header (with its hint line) stays visible */
@@ -218,7 +222,8 @@ path.leaflet-interactive:focus{outline:none}
 .tech-row{border-bottom:1px solid var(--line);border-left:3px solid var(--orange);padding:5px 8px}
 .tech-row b{display:block;font-size:13px;font-weight:600;color:var(--tech-ink)}
 .tech-row small{font-size:11px;color:var(--muted)}
-.tech-row.off{opacity:.5}
+.tech-row.off{border-left-color:var(--field)}
+.tech-row.off b{color:var(--muted)}
 textarea{width:100%;border:1px solid var(--field);border-radius:4px;background:var(--surface);padding:8px 9px;resize:vertical;min-height:84px;line-height:1.4;color:var(--ink)}
 .save-state{min-height:18px;color:var(--muted);font-size:11px;margin:4px 0 0}
 .btnrow{display:flex;gap:8px;flex-wrap:wrap}
@@ -232,7 +237,7 @@ textarea{width:100%;border:1px solid var(--field);border-radius:4px;background:v
 .pin.tech{width:21px;height:21px;background:var(--orange)}
 .pin.selected{outline:3px solid #ffcf3d;outline-offset:1px}
 .zone-label{background:transparent!important;border:0!important}
-.zone-label span{display:inline-block;transform:translate(-50%,-50%);white-space:nowrap;font-weight:700;font-size:14px;letter-spacing:.3px;color:#fff;padding:4px 10px;border-radius:4px;box-shadow:0 2px 8px #0004;pointer-events:none}
+.zone-label span{display:inline-block;transform:translate(-50%,-50%);white-space:nowrap;font-weight:700;font-size:14px;letter-spacing:.3px;padding:4px 10px;border-radius:4px;box-shadow:0 2px 8px #0004;pointer-events:none}
 .leaflet-tooltip.techlabel{background:var(--tech-tip-bg);border:2px solid #f3b445;border-radius:4px;box-shadow:0 2px 8px #0004;color:var(--tech-tip-ink);font-weight:700;font-size:12px;padding:4px 8px;white-space:nowrap}
 .techlabel .twn{font-weight:400;color:var(--tech-tip-sub)}
 .leaflet-tooltip.marketlabel{background:var(--market-tip-bg);border:1px solid #28a5bd;border-radius:4px;box-shadow:0 1px 6px #0005;color:var(--market-tip-ink);font-weight:600;font-size:11px;padding:2px 5px;white-space:nowrap}
@@ -254,13 +259,15 @@ textarea{width:100%;border:1px solid var(--field);border-radius:4px;background:v
 .leaflet-bar a{background-color:var(--surface);color:var(--ink);border-bottom-color:var(--field)}
 .leaflet-bar a:hover,.leaflet-bar a:focus{background-color:var(--ctl-hover)}
 .leaflet-bar a.leaflet-disabled{background-color:var(--ctl-hover);color:var(--muted)}
-.leaflet-control-attribution{background:var(--attr-bg);color:var(--muted)}
-.leaflet-control-attribution a{color:var(--link)}
+/* Leaflet styles the attribution as .leaflet-container .leaflet-control-attribution, so these match that
+   specificity or its light background wins in dark mode */
+.leaflet-container .leaflet-control-attribution{background:var(--attr-bg);color:var(--muted)}
+.leaflet-container .leaflet-control-attribution a{color:var(--link)}
 
 .stage-anchor{background:transparent!important;border:0!important;pointer-events:none}
 .stage-flag-list{position:absolute;top:18px;left:12px;display:flex;flex-direction:column;align-items:flex-start;gap:3px;pointer-events:none;min-width:98px;filter:drop-shadow(0 1px 4px #0008)}
 .stage-flag{border:1px solid #fff9;border-radius:4px;color:#fff;font-weight:700;font-size:11px;line-height:1.18;white-space:nowrap;padding:5px 7px;display:inline-flex;align-items:center;gap:5px}
-.stage-flag .stage-mini{font-size:9px;border-radius:3px;background:#fff3;padding:1px 3px;min-width:22px;text-align:center}
+.stage-flag .stage-mini{font-size:9px;border-radius:3px;background:#0003;padding:1px 3px;min-width:22px;text-align:center}
 
 /* Sidebar footer: the legend and the build's update stamp, held at the sidebar's bottom edge while the
    sections scroll above it. The sidebar is a flex column only so a short list still pushes it down */
