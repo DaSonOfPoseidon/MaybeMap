@@ -50,3 +50,9 @@ or anything CI already checks (formatting, lints, tests).
 
 Classes of bug past reviews caught here are in [`docs/pitfalls.md`](docs/pitfalls.md); check every change
 against them.
+
+## PR loop
+
+Settings for the ship skill's orchestrated PR loop. Unset ones take the loop's defaults.
+
+- merge: yes
