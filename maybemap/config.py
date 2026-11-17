@@ -53,10 +53,22 @@ REGION_PALETTE = [
     "#5e35b1",
 ]
 
-# Customer-count filter buckets: inclusive (low, high) pairs, the last open-ended.
+# Customer-count groups as (label, low, high, dot radius in px): high is inclusive and the
+# last is open-ended. One list sets both the sidebar's customer filter and the size of each
+# town's dot, so the two cannot drift apart. They are contiguous and ascend in low and radius,
+# and the steps grow faster at the top because readers underestimate large circles.
 # They start at 0 so a town the export lists with no customers is still filterable;
 # only a town with no count at all escapes the filter.
-CUSTOMER_BUCKETS = [(0, 5), (6, 10), (11, 20), (21, None)]
+CUSTOMER_BUCKETS = [
+    ("0-5", 0, 5, 3),
+    ("6-24", 6, 24, 4),
+    ("25-99", 25, 99, 5),
+    ("100-499", 100, 499, 6),
+    ("500-999", 500, 999, 7),
+    ("1k-5k", 1000, 4999, 8.5),
+    ("5k-10k", 5000, 9999, 10),
+    ("10k+", 10000, None, 12),
+]
 # Service Mix values the filter knows; anything else is left out of that filter
 SERVICE_TYPES = {
     "Business Only": "business",

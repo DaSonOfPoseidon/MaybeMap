@@ -301,10 +301,6 @@ def build_staging(staging: pd.DataFrame, places: list[dict]) -> list[dict]:
     return [{"type": t, "places": towns} for t, towns in groups.items()]
 
 
-def _bucket_labels() -> list[str]:
-    return [f"{lo}+" if hi is None else f"{lo}-{hi}" for lo, hi in CUSTOMER_BUCKETS]
-
-
 def build(
     *,
     city_path: Path | str = CITY_DATA_PATH,
@@ -365,8 +361,7 @@ def build(
         "cities": cities,
         "outlines": outlines,
         "buckets": [
-            {"label": label, "lo": lo, "hi": hi}
-            for label, (lo, hi) in zip(_bucket_labels(), CUSTOMER_BUCKETS, strict=True)
+            {"label": label, "lo": lo, "hi": hi, "r": r} for label, lo, hi, r in CUSTOMER_BUCKETS
         ],
         "unassignedLabel": UNASSIGNED_GROUP_LABEL,
         "serviceTypes": [{"key": k, "label": k.title()} for k in SERVICE_TYPES.values()],

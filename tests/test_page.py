@@ -554,7 +554,7 @@ def test_dots_are_sized_by_customers_without_a_legend_key():
     assert select and "highlight.setRadius(" in select.group(0)
     assert "dotRadius(" in select.group(0)
     legend = re.search(r"^function renderLegend\(\) \{.*?^\}$", source, re.M | re.S)
-    assert legend and "DOT_TIERS" not in legend.group(0)
+    assert legend and "buckets" not in legend.group(0)
     assert "legend-head" not in legend.group(0)
     assert "createTextNode(text)" in legend.group(0)
 

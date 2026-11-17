@@ -237,22 +237,16 @@ function renderOutlines() {
   }
 }
 
-// Dot size comes from the town's customer count in tiers (radius in px), 1,000 and up being the largest.
-// These are separate from the customer-count filter buckets
-const DOT_TIERS = [
-  { lo: 1, r: 3 },
-  { lo: 10, r: 4 },
-  { lo: 25, r: 5 },
-  { lo: 100, r: 6 },
-  { lo: 250, r: 7.5 },
-  { lo: 1000, r: 9 },
-];
-// A town with no count (or none) gets this dot, smaller than the first tier
+// Dot size comes from the same customer-count groups as the filter buttons: each bucket carries its
+// dot radius in px (`r`), so the dots and the filter cannot drift apart
+// A town with no count (or a zero one) gets this dot, smaller than the first group's
 const MISSING_DOT = 2.5;
-function dotRadius(n) {
+function dotRadius(n, buckets = D.buckets) {
   if (!Number.isFinite(n) || n <= 0) return MISSING_DOT;
-  let r = DOT_TIERS[0].r;
-  for (const t of DOT_TIERS) if (n >= t.lo) r = t.r;
+  // The last group whose floor the count reaches; only `lo` is used, so a fractional count falls into
+  // the group below instead of between two
+  let r = buckets[0].r;
+  for (const b of buckets) if (n >= b.lo) r = b.r;
   return r;
 }
 const dotLayers = cities.map(c => {
