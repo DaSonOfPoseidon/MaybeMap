@@ -2,10 +2,11 @@
 # path that is missing or of the wrong type stops the build.
 
 import base64
+import re
 
 import pytest
 
-from maybemap import branding
+from maybemap import branding, colors
 
 ALL_COLORS = [var for var, _ in branding.COLORS.values()]
 
@@ -96,7 +97,18 @@ def test_a_file_of_the_wrong_type_stops_the_build(monkeypatch, tmp_path, var, na
 
 def test_css_sets_the_variables_and_only_the_fonts_given():
     css = branding.css(branding.Branding(heading_font="data:font/woff2;base64,AA=="))
-    assert ":root{--brand-dark:#1f2a44;--brand:#2f5d8a;--brand-2:#2f5d8a;--accent:#e0a526}" in css
+    assert (
+        ":root{--brand-dark:#1f2a44;--brand:#2f5d8a;--brand-2:#2f5d8a;"
+        "--brand-2-deep:#2e5b87;--accent:#e0a526}"
+    ) in css
     assert "font-family:MapHeading;src:url(data:font/woff2;base64,AA==)" in css
     assert "MapBody" not in css
     assert "@font-face" not in branding.css(branding.Branding())
+
+
+@pytest.mark.parametrize("secondary", ["#883F98", "#2f5d8a", "#ffcc00", "#ffffff", "#000000"])
+def test_the_gradient_end_under_the_presets_keeps_white_text_at_aaa(secondary):
+    # The preset buttons' white text sits on the secondary end of the header gradient
+    css = branding.css(branding.Branding(secondary=secondary))
+    deep = re.search(r"--brand-2-deep:(#[0-9a-f]{6})", css).group(1)
+    assert colors.contrast("#ffffff", deep) >= 7

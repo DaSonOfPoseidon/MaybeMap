@@ -6,7 +6,7 @@ import json
 import pandas as pd
 import pytest
 
-from maybemap import config, geocoding, payload
+from maybemap import colors, config, geocoding, payload
 from maybemap.config import UNASSIGNED_GROUP_LABEL
 
 
@@ -75,6 +75,9 @@ def test_zones_carry_their_kml_colors(built):
     props = {f["properties"]["label"]: f["properties"] for f in built["zones"]["features"]}
     assert props["MO West"]["color"] == "#0070ff"
     assert props["MO West"]["edge"] != "#0070ff"
+    # Each label gets a box and text color that read at AAA contrast
+    for p in props.values():
+        assert colors.contrast(p["label_ink"], p["label_bg"]) >= 7
 
 
 def test_every_town_gets_a_dot_and_a_zone_when_inside_one(built):

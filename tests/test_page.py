@@ -2,11 +2,12 @@
 # script block.
 
 import json
+import math
 import re
 
 import pytest
 
-from maybemap import branding, page
+from maybemap import branding, colors, page
 
 PAYLOAD = {
     "title": "Test & Map",
@@ -397,7 +398,10 @@ BRANDED = branding.Branding(
 
 def test_branding_is_inlined_and_the_logo_shown():
     html = page.render(PAYLOAD, BRANDED)
-    assert ":root{--brand-dark:#20245C;--brand:#352B79;--brand-2:#883F98;--accent:#FDB912}" in html
+    assert (
+        ":root{--brand-dark:#20245C;--brand:#352B79;--brand-2:#883F98;"
+        "--brand-2-deep:#803b8f;--accent:#FDB912}"
+    ) in html
     assert "src:url(data:font/woff2;base64,SEVBRA==)" in html
     assert "src:url(data:font/woff2;base64,Qk9EWQ==)" in html
     assert '<img class="brand-logo" src="data:image/png;base64,TE9HTw==" alt="">' in html
@@ -677,3 +681,130 @@ def test_reset_keeps_the_theme_and_the_basemap_follows_it():
     assert "themeFrom(readStore(THEME_KEY))" in source
     html = (page.WEB_DIR / "template.html").read_text(encoding="utf-8")
     assert 'data-value="gray">Gray<' in html
+
+
+# ---------- AAA text contrast (WCAG 1.4.6: 7:1 for normal-size text) ----------
+
+
+def _oklch(rgb):
+    lin = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in rgb]
+    r, g, b = lin
+    lms = [
+        (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3),
+        (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3),
+        (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3),
+    ]
+    lk = 0.2104542553 * lms[0] + 0.7936177850 * lms[1] - 0.0040720468 * lms[2]
+    a = 1.9779984951 * lms[0] - 2.4285922050 * lms[1] + 0.4505937099 * lms[2]
+    bb = 0.0259040371 * lms[0] + 0.7827717662 * lms[1] - 0.8086757660 * lms[2]
+    return lk, math.hypot(a, bb), math.atan2(bb, a)
+
+
+def _from_oklch(lk, c, h):
+    a, b = c * math.cos(h), c * math.sin(h)
+    l_ = (lk + 0.3963377774 * a + 0.2158037573 * b) ** 3
+    m_ = (lk - 0.1055613458 * a - 0.0638541728 * b) ** 3
+    s_ = (lk - 0.0894841775 * a - 1.2914855480 * b) ** 3
+    lin = (
+        4.0767416621 * l_ - 3.3077115913 * m_ + 0.2309699292 * s_,
+        -1.2684380046 * l_ + 2.6097574011 * m_ - 0.3413193965 * s_,
+        -0.0041960863 * l_ - 0.7034186147 * m_ + 1.7076147010 * s_,
+    )
+    # Clamped to sRGB the way a browser maps an out-of-gamut color
+    out = [max(0.0, min(1.0, x)) for x in lin]
+    return [12.92 * x if x <= 0.0031308 else 1.055 * x ** (1 / 2.4) - 0.055 for x in out]
+
+
+def _rgba(hex_color):
+    h = hex_color.lstrip("#")
+    if len(h) in (3, 4):
+        h = "".join(ch * 2 for ch in h)
+    alpha = int(h[6:8], 16) / 255 if len(h) == 8 else 1.0
+    return [int(h[i : i + 2], 16) / 255 for i in (0, 2, 4)], alpha
+
+
+def _hex(rgb):
+    return "#" + "".join(f"{round(c * 255):02x}" for c in rgb)
+
+
+def _tokens(body):
+    return dict(re.findall(r"(--[a-z0-9-]+):([^;}]+)", body))
+
+
+def _resolve(name, tokens):
+    # A token's color as #rrggbb, translucent ones laid over the map background
+    value = tokens[name].strip()
+    if m := re.fullmatch(r"var\((--[a-z0-9-]+)\)", value):
+        return _resolve(m.group(1), tokens)
+    if m := re.fullmatch(r"oklch\(from var\((--[a-z0-9-]+)\) max\(l,([.\d]+)\) c h\)", value):
+        lk, c, h = _oklch(_rgba(_resolve(m.group(1), tokens))[0])
+        return _hex(_from_oklch(max(lk, float(m.group(2))), c, h))
+    rgb, alpha = _rgba(value)
+    if alpha < 1:
+        base = _rgba(_resolve("--map-bg", tokens))[0]
+        rgb = [f * alpha + b * (1 - alpha) for f, b in zip(rgb, base, strict=True)]
+    return _hex(rgb)
+
+
+def _seg_active(tokens):
+    # .seg button.active: color-mix(in srgb, var(--brand-ui) 13%, var(--surface))
+    ui, surface = (_rgba(_resolve(t, tokens))[0] for t in ("--brand-ui", "--surface"))
+    return _hex([u * 0.13 + s * 0.87 for u, s in zip(ui, surface, strict=True)])
+
+
+TEXT_PAIRS = [
+    ("--ink", ("--panel", "--hover", "--surface", "--pop")),
+    ("--muted", ("--panel", "--hover", "--surface", "--pop", "--ctl-hover", "--attr-bg")),
+    ("--link", ("--attr-bg",)),
+    ("--heading", ("--panel", "--hover", "seg-active")),
+    ("--brand-ui", ("--panel", "--hover", "--surface", "seg-active")),
+    ("--tech-ink", ("--panel", "--hover", "--tech-bg")),
+    ("--tech-tip-ink", ("--tech-tip-bg",)),
+    ("--tech-tip-sub", ("--tech-tip-bg",)),
+    ("--market-tip-ink", ("--market-tip-bg",)),
+    ("--market-tip-name", ("--market-tip-bg",)),
+    ("--edge-tip-ink", ("--edge-tip-bg",)),
+]
+
+
+def _theme_tokens(theme, brand):
+    css = (page.WEB_DIR / "app.css").read_text(encoding="utf-8")
+    tokens = _tokens(branding.css(brand)) | _tokens(_css_rule(css, ":root"))
+    if theme == "dark":
+        tokens |= _tokens(_dark_blocks(css)[0])
+    return tokens
+
+
+@pytest.mark.parametrize("brand", [BRANDED, branding.Branding()], ids=["branded", "default"])
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_every_text_color_reaches_aaa_contrast_on_its_backgrounds(theme, brand):
+    if theme == "light" and brand != BRANDED:
+        # Light brand text is the brand's own color, so only the real brand is held to it here
+        pairs = [(fg, bgs) for fg, bgs in TEXT_PAIRS if fg not in ("--heading", "--brand-ui")]
+    else:
+        pairs = TEXT_PAIRS
+    tokens = _theme_tokens(theme, brand)
+    fails = []
+    for fg, bgs in pairs:
+        for bg in bgs:
+            back = _seg_active(tokens) if bg == "seg-active" else _resolve(bg, tokens)
+            ratio = colors.contrast(_resolve(fg, tokens), back)
+            if ratio < 7:
+                fails.append(f"{fg} on {bg}: {ratio:.2f}")
+    assert not fails, fails
+
+
+def test_an_off_layer_recolors_its_text_instead_of_fading_it():
+    # Its controls still work, so the text must keep full contrast; only swatches and switches dim
+    css = (page.WEB_DIR / "app.css").read_text(encoding="utf-8")
+    for selector in (".layer.off .layer-body", ".tech-row.off"):
+        assert "opacity" not in _css_rule(css, selector), selector
+    assert "--ink:var(--muted)" in _css_rule(css, ".layer.off .layer-body")
+    assert "opacity:.45" in _css_rule(css, ".layer.off .layer-body :is(.swatch,input)")
+
+
+def test_the_attribution_outranks_leaflets_own_light_background():
+    # Leaflet's rule is .leaflet-container .leaflet-control-attribution; a lone class loses to it
+    css = (page.WEB_DIR / "app.css").read_text(encoding="utf-8")
+    body = _css_rule(css, ".leaflet-container .leaflet-control-attribution")
+    assert "background:var(--attr-bg)" in body

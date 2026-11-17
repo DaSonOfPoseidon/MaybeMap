@@ -189,7 +189,7 @@ for (const f of D.zones.features) {
   zoneLayers.set(p.label, layer);
   zoneLabelLayers.set(p.label, L.marker(p.anchor, {
     pane: 'basemapLabels', interactive: false, keyboard: false,
-    icon: L.divIcon({ className: 'zone-label', html: '<span style="background:' + p.edge + 'e6">' + esc(p.label) + '</span>', iconSize: [0, 0] }),
+    icon: L.divIcon({ className: 'zone-label', html: '<span style="background:' + p.label_bg + ';color:' + p.label_ink + '">' + esc(p.label) + '</span>', iconSize: [0, 0] }),
   }));
 }
 function zoneCityCount(label) { return cities.filter(c => c.zone === label).length; }
@@ -439,8 +439,9 @@ function renderDispatch() {
 }
 
 // ---------- Staging ----------
-const STAGING_COLORS = { generator: '#b65d03', outage: '#be2b43', warehouse: '#5d51b9' };
-const FALLBACK_STAGING = ['#00796b', '#6d4c41', '#c2185b', '#455a64'];
+// Dark enough for white flag text at AAA contrast (7:1)
+const STAGING_COLORS = { generator: '#8a4702', outage: '#a7263b', warehouse: '#564baa' };
+const FALLBACK_STAGING = ['#006358', '#6d4c41', '#ab1550', '#455a64'];
 const stagingColor = (t, i) => STAGING_COLORS[t.toLowerCase()] || FALLBACK_STAGING[i % FALLBACK_STAGING.length];
 const stagingLayer = L.layerGroup().addTo(map);
 function renderStaging() {

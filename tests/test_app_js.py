@@ -8,6 +8,7 @@ import subprocess
 
 import pytest
 
+from maybemap import colors
 from maybemap.page import WEB_DIR
 
 NODE = shutil.which("node")
@@ -470,3 +471,13 @@ def test_only_gray_swaps_its_tiles_on_a_dark_page():
         "satellite",
         "streets",
     ]
+
+
+def test_staging_flag_colors_keep_white_text_at_aaa():
+    # The flags and the swatch letters are white text on these colors
+    source = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    block = re.search(r"const STAGING_COLORS = .*?\nconst FALLBACK_STAGING = .*?;", source, re.S)
+    found = re.findall(r"#[0-9a-f]{6}", block.group(0))
+    assert len(found) == 7
+    for color in found:
+        assert colors.contrast("#ffffff", color) >= 7, color

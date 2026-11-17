@@ -10,6 +10,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from maybemap.colors import WHITE, readable
 from maybemap.config import PROJECT_ROOT
 
 load_dotenv(PROJECT_ROOT / ".env")
@@ -86,9 +87,12 @@ def load_branding() -> Branding:
 
 def css(b: Branding) -> str:
     # The brand variables and font faces, prepended to the page's stylesheet
+    # The preset buttons' white text sits on the gradient's secondary end, so that end is
+    # darkened as far as AAA contrast needs (a dark enough secondary passes unchanged)
+    deep, _ = readable(b.secondary, ink=WHITE)
     rules = [
         f":root{{--brand-dark:{b.dark};--brand:{b.primary};"
-        f"--brand-2:{b.secondary};--accent:{b.accent}}}"
+        f"--brand-2:{b.secondary};--brand-2-deep:{deep};--accent:{b.accent}}}"
     ]
     for family, uri in (("MapHeading", b.heading_font), ("MapBody", b.body_font)):
         if uri:
